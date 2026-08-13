@@ -134,17 +134,40 @@ button { font-family: inherit; cursor: pointer; }
   margin: 4px 4px 12px; white-space: nowrap;
 }
 
-/* ── 사이드바 간결모드(아이콘만) ── */
-.side-toggle {
-  width: 100%; display: flex; align-items: center; justify-content: flex-end; gap: 6px;
-  border: 1px solid var(--line); background: var(--panel-2); color: var(--ink-soft);
-  border-radius: var(--r-md); padding: 5px 9px; font-size: 11.5px; font-weight: 600;
-  margin-bottom: 14px; line-height: 1;
+/* ── 사이드바: 간편모드(아이콘만) / 설명모드 ── */
+.side-mode {
+  display: flex; gap: 3px; margin-bottom: 14px;
+  background: var(--panel-2); border: 1px solid var(--line);
+  border-radius: var(--r-md); padding: 3px;
 }
-.side-toggle:hover { color: var(--accent); border-color: var(--accent); }
+.side-mode button {
+  flex: 1; border: none; background: transparent; color: var(--ink-soft);
+  font-size: 11.5px; font-weight: 700; padding: 5px 4px; border-radius: 5px; line-height: 1;
+}
+.side-mode button.on { background: #fff; color: var(--accent); box-shadow: 0 1px 3px rgba(40,38,32,.12); }
+
+/* 칸 도구 */
+.stools { display: flex; flex-direction: column; gap: 6px; }
+.stool {
+  display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+  border: 1px solid var(--line); background: var(--panel-2); color: var(--ink);
+  border-radius: var(--r-md); padding: 8px 10px;
+}
+.stool:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.stool:disabled { opacity: .4; cursor: default; }
+.stool-ico { display: grid; place-items: center; width: 20px; flex: none; color: var(--accent); }
+.stool-ico svg { width: 17px; height: 17px; }
+.stool-txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.stool-lab { font-size: 12.5px; font-weight: 700; }
+.stool-desc { font-size: 11px; color: var(--ink-soft); line-height: 1.35; }
+.side-note.tool-note { margin-bottom: 10px; }
+
 .app.side-collapsed {
   grid-template-columns: 72px 1fr;
 }
+.app.side-collapsed .side-mode { flex-direction: column; }
+.app.side-collapsed .stool { justify-content: center; padding: 8px 4px; }
+.app.side-collapsed .stool-txt { display: none; }
 .app.side-collapsed .brand { padding: 0; justify-content: center; }
 .app.side-collapsed .brand h1 { display: none; }
 .app.side-collapsed .sidebar { padding: 12px 8px 40px; }
@@ -669,22 +692,19 @@ button { font-family: inherit; cursor: pointer; }
 .hdiv.adjustable.dragging { cursor: grabbing; }
 .hdiv.adjustable.dragging::before { background: var(--accent); box-shadow: 0 0 0 2px rgba(46,75,115,.25); }
 
-/* 도구 막대 — 필드를 가리지 않도록 블록 바깥 위쪽에 띄운다 */
-.block-tools {
-  position: absolute; bottom: 100%; right: 0; margin-bottom: 3px;
-  z-index: 14; display: flex; align-items: center; justify-content: flex-end;
-  opacity: 0; pointer-events: none; transition: opacity .12s;
+/* 도구가 적용될 칸 표시 */
+.panel-active::after {
+  content: ""; position: absolute; inset: 0; z-index: 3;
+  border: 1.5px solid var(--accent); border-radius: 3px;
+  pointer-events: none; opacity: .5;
 }
-.block:hover .block-tools,
-.block:focus-within .block-tools,
-.block-tools:hover { opacity: 1; pointer-events: auto; }
 
-.ptools { display: none; align-items: center; gap: 4px; }
-.ptools.on { display: flex; }
-
-.field-tools {
-  display: flex; gap: 4px; align-items: center; flex-wrap: wrap; justify-content: flex-end;
+/* 필기 도구 막대 — 본문을 가리지 않도록 화면 아래 가운데에 띄운다 */
+.draw-tb-host {
+  position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%);
+  z-index: 62; display: flex; justify-content: center;
 }
+.app.note-on .draw-tb-host { bottom: 74px; }
 .minibtn {
   border: 1px solid var(--line); background: #fff; color: var(--ink-soft);
   font-size: 11px; font-weight: 600; height: 26px; padding: 0 9px; border-radius: 6px;
@@ -732,6 +752,12 @@ button { font-family: inherit; cursor: pointer; }
 .galign { position: absolute; background: var(--accent-2); pointer-events: none; z-index: 7; opacity: .85; }
 .galign.v { width: 1px; top: 0; bottom: 0; }
 .galign.h { height: 1px; left: 0; right: 0; }
+
+/* 이미지를 고르면 도구 막대가 칸 경계 밖으로 나가도 잘리지 않게 한다 */
+.stack:has(.imgobj.selected),
+.panel:has(.imgobj.selected),
+.img-layer:has(.imgobj.selected) { overflow: visible; }
+.imgobj.selected { z-index: 20; }
 
 /* ── 이미지 자르기 ── */
 .imgobj.cropping { cursor: default; }
@@ -981,7 +1007,8 @@ button { font-family: inherit; cursor: pointer; }
     min-height: 297mm;
     max-height: 297mm;
     box-sizing: border-box;
-    padding: 46px 52px 28px;
+    /* 여백은 .page-inner 한 곳에서만 준다 — 여기서 또 주면 이중으로 밀린다 */
+    padding: 0;
     margin: 0;
     background: var(--paper) !important;
     box-shadow: none;
@@ -992,6 +1019,16 @@ button { font-family: inherit; cursor: pointer; }
     overflow: hidden;
     page-break-after: always;
     break-after: page;
+  }
+
+  /* 본문 상자 — 화면과 같은 여백. 필기용 모드에서만 축소된다. */
+  .page-inner {
+    flex: 1;
+    min-height: 0;
+    box-sizing: border-box;
+    padding: 46px 52px 28px;
+    display: flex;
+    flex-direction: column;
   }
 
   .sheet-page:last-child {
@@ -1031,10 +1068,9 @@ button { font-family: inherit; cursor: pointer; }
   .resize-h,
   .vdiv,
   .hdiv,
-  .field-tools,
-  .block-tools,
   .page-tools,
   .notebar,
+  .draw-tb-host,
   .size-badge,
   .ihandle,
   .img-tb,
@@ -1047,6 +1083,7 @@ button { font-family: inherit; cursor: pointer; }
   /* 필기용 모드: 여백은 그대로 인쇄하고 안내선만 감춘다 */
   .sheet-book.note-mode .page-inner { outline: none !important; }
   .page-draw { box-shadow: none !important; }
+  .panel-active::after { display: none !important; }
 
   /* 필기 텍스트는 인쇄에 그대로 표시 (편집용 배경만 제거) */
   .dt-body { background: transparent !important; box-shadow: none !important; }

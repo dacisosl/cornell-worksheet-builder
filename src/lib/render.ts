@@ -1,6 +1,5 @@
 import { CONTENT_H, DEFAULTS, TITLE_SIZE_DEFAULT, TITLE_SIZE_MAX, TITLE_SIZE_MIN, TITLE_SIZE_STEP } from '../constants';
 import { makeBlock, sizeLabel } from './blocks';
-import type { DrawService } from './draw';
 import type { ImageService } from './images';
 import type { Interactions } from './interactions';
 import type { PageBook } from './pagination';
@@ -9,48 +8,36 @@ import type { BgMode, Block, ConceptBlock, MockBlock, ProblemBlock } from '../ty
 import { $, $$, el } from '../utils/dom';
 import { Icons } from '../utils/icons';
 
+/** 사이드바 도구가 조작할 칸(패널) 정보 */
+export interface PanelInfo {
+  panel: HTMLElement;
+  block: Block;
+  key: string;
+  withImages: boolean;
+}
+
 export interface RenderContext {
   store: Store;
   images: ImageService;
   interactions: Interactions;
-  draw: DrawService;
   pageBook: PageBook;
   paginateSoon: () => void;
+  registerPanel: (info: PanelInfo) => void;
+  resetPanels: () => void;
 }
 
 export function createRenderer(ctx: RenderContext) {
-  const { store, images, interactions, draw, pageBook, paginateSoon } = ctx;
+  const { store, images, interactions, pageBook, paginateSoon, registerPanel, resetPanels } = ctx;
 
-  /**
-   * 패널의 도구(이미지·정돈·필기)를 블록 바깥 위쪽 막대에 모아 둔다.
-   * 필드 위에 겹치지 않도록 블록 상단 여백에 띄우고, 마우스가 올라간 패널의 도구만 보여준다.
-   */
+  /** 패널 도구는 왼쪽 사이드바에서 조작한다 — 선택된(활성) 칸을 등록만 해 둔다. */
   function attachPanelTools(
-    node: HTMLElement,
+    _node: HTMLElement,
     panel: HTMLElement,
     b: Block,
     key: string,
     withImages: boolean,
   ): void {
-    let host = $('.block-tools', node) as HTMLElement | null;
-    if (!host) {
-      host = el('div', { class: 'block-tools' });
-      node.appendChild(host);
-    }
-
-    const group = el('div', { class: 'ptools' });
-    if (withImages) group.appendChild(images.imgTools(b));
-    group.appendChild(draw.attach(panel, b, key, group));
-    host.appendChild(group);
-
-    // 첫 패널 도구를 기본으로 보여 준다.
-    if (host.children.length === 1) group.classList.add('on');
-
-    const show = (): void => {
-      ($$('.ptools', host) as HTMLElement[]).forEach((g) => g.classList.toggle('on', g === group));
-    };
-    panel.addEventListener('pointerenter', show);
-    panel.addEventListener('focusin', show);
+    registerPanel({ panel, block: b, key, withImages });
   }
 
   function syncFromDOM(): void {
@@ -661,6 +648,7 @@ export function createRenderer(ctx: RenderContext) {
   }
 
   function render(): void {
+    resetPanels();
     pageBook.clearBlockNodes();
     const stack = pageBook.getPrimaryStack();
     stack.innerHTML = '';

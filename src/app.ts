@@ -15,7 +15,7 @@ import { createDrawService } from './lib/draw';
 import { createImageService } from './lib/images';
 import { createInteractions } from './lib/interactions';
 import { createPagination } from './lib/pagination';
-import { createRenderer } from './lib/render';
+import { createRenderer, type PanelInfo } from './lib/render';
 import { Store } from './state/store';
 import type { BlockType } from './types';
 import { debounce, el } from './utils/dom';
@@ -83,7 +83,48 @@ export function createApp(root: HTMLElement) {
     paginate: () => pagination.paginate(),
   });
 
-  renderer = createRenderer({ store, images, interactions, draw, pageBook: pagination, paginateSoon });
+  // ── 사이드바 칸 도구 ─────────────────────────────────────────────
+  interface PanelReg extends PanelInfo {
+    drawBtn: HTMLButtonElement;
+  }
+
+  const drawTbHost = el('div', { class: 'draw-tb-host', id: 'drawTbHost' });
+  let panelRegs: PanelReg[] = [];
+  let activeReg: PanelReg | null = null;
+
+  function resetPanels(): void {
+    panelRegs = [];
+    activeReg = null;
+    drawTbHost.innerHTML = '';
+  }
+
+  function setActivePanel(reg: PanelReg): void {
+    if (activeReg === reg) return;
+    activeReg = reg;
+    panelRegs.forEach((r) => r.panel.classList.toggle('panel-active', r === reg));
+    refreshSideTools();
+  }
+
+  function registerPanel(info: PanelInfo): void {
+    const drawBtn = draw.attach(info.panel, info.block, info.key, drawTbHost);
+    const reg: PanelReg = { ...info, drawBtn };
+    panelRegs.push(reg);
+
+    const activate = (): void => setActivePanel(reg);
+    info.panel.addEventListener('pointerdown', activate);
+    info.panel.addEventListener('focusin', activate);
+    if (!activeReg) setActivePanel(reg);
+  }
+
+  renderer = createRenderer({
+    store,
+    images,
+    interactions,
+    pageBook: pagination,
+    paginateSoon,
+    registerPanel,
+    resetPanels,
+  });
 
   function setZoom(z: number): void {
     store.setZoom(Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z)));
@@ -121,15 +162,10 @@ export function createApp(root: HTMLElement) {
   }
 
   function exportWorksheet(): void {
-    downloadJSON(`${safeTitle()}_${dateStamp()}.cornell.json`);
-  }
-
-  /** 필기용 파일로 저장 — 저장 후 바로 필기용 편집 화면으로 넘어간다. */
-  function exportNote(): void {
     renderer.syncFromDOM();
-    if (!store.state.meta.note.on) setNoteMode(true);
     store.save();
-    downloadJSON(`${safeTitle()}_필기용_${dateStamp()}.cornell.json`);
+    const tag = store.state.meta.note.on ? '_필기용' : '';
+    downloadJSON(`${safeTitle()}${tag}_${dateStamp()}.cornell.json`);
   }
 
   function setNoteMode(on: boolean): void {
@@ -157,6 +193,7 @@ export function createApp(root: HTMLElement) {
   function refreshNoteBar(): void {
     const { on, margin } = store.state.meta.note;
     root.classList.toggle('note-on', on);
+    document.getElementById('noteToggle')?.classList.toggle('active', on);
     if (!noteRange) return;
     noteRange.value = String(margin);
     const v = (margin * A4_H_MM) / A4_W_MM;
@@ -194,12 +231,6 @@ export function createApp(root: HTMLElement) {
       el('span', { class: 'note-sep' }),
       el('span', { class: 'note-hint', text: '여백의 연필 버튼으로 메모를 씁니다' }),
       el('span', { class: 'note-sep' }),
-      el('button', {
-        class: 'tbtn ghost',
-        html: Icons.download + '<span>필기용 저장</span>',
-        title: '필기용 JSON 파일로 저장',
-        onclick: exportNote,
-      }),
       el('button', {
         class: 'tbtn primary',
         html: Icons.print + '<span>인쇄 / PDF</span>',
@@ -276,9 +307,10 @@ export function createApp(root: HTMLElement) {
         }),
         el('button', {
           class: 'tbtn ghost',
-          title: '본문을 줄여 여백을 만든 필기용 파일로 저장하고 편집합니다',
+          id: 'noteToggle',
+          title: '본문을 줄여 여백을 만든 필기용 인쇄본으로 전환합니다',
           html: Icons.pencil + '<span>필기용</span>',
-          onclick: exportNote,
+          onclick: () => setNoteMode(!store.state.meta.note.on),
         }),
         el('button', { class: 'tbtn ghost', text: '전체 비우기', onclick: resetAll }),
         el('button', {
@@ -291,28 +323,42 @@ export function createApp(root: HTMLElement) {
 
     const sidebar = el('aside', { class: 'sidebar' });
 
-    // 간결모드: 사이드바를 접어 블록 팔레트를 아이콘(썸네일)만 표시
-    const SIDE_KEY = 'cornell-side-collapsed';
-    if (localStorage.getItem(SIDE_KEY) === '1') root.classList.add('side-collapsed');
-    const sideToggle = el('button', {
-      class: 'side-toggle',
-      title: '사이드바 접기/펼치기',
-      onclick: () => {
-        const on = root.classList.toggle('side-collapsed');
-        try {
-          localStorage.setItem(SIDE_KEY, on ? '1' : '0');
-        } catch {
-          /* ignore */
-        }
-        refreshSideToggle();
-      },
-    });
-    function refreshSideToggle(): void {
-      const on = root.classList.contains('side-collapsed');
-      sideToggle.innerHTML = on ? '&raquo;' : '<span>간결모드</span>&laquo;';
+    // 간편모드(아이콘만) / 설명모드(설명 포함) 전환
+    const SIDE_KEY = 'cornell-side-mode';
+    if (localStorage.getItem(SIDE_KEY) === 'simple') root.classList.add('side-collapsed');
+
+    const modeSeg = el('div', { class: 'side-mode' });
+    function setSideMode(simple: boolean): void {
+      root.classList.toggle('side-collapsed', simple);
+      try {
+        localStorage.setItem(SIDE_KEY, simple ? 'simple' : 'detail');
+      } catch {
+        /* ignore */
+      }
+      refreshSideMode();
     }
-    refreshSideToggle();
-    sidebar.appendChild(sideToggle);
+    function refreshSideMode(): void {
+      const simple = root.classList.contains('side-collapsed');
+      modeSeg.innerHTML = '';
+      modeSeg.append(
+        el('button', {
+          class: simple ? 'on' : '',
+          title: '간편모드 — 아이콘만 표시',
+          html: '<span>간편</span>',
+          onclick: () => setSideMode(true),
+        }),
+        el('button', {
+          class: !simple ? 'on' : '',
+          title: '설명모드 — 설명까지 표시',
+          html: '<span>설명</span>',
+          onclick: () => setSideMode(false),
+        }),
+      );
+    }
+    refreshSideMode();
+    sidebar.appendChild(modeSeg);
+
+    sidebar.appendChild(buildSideTools());
 
     sidebar.appendChild(
       el('div', { class: 'side-section' }, [
@@ -370,8 +416,104 @@ export function createApp(root: HTMLElement) {
       el('main', { class: 'canvas', id: 'canvas' }, el('div', { class: 'sheet-wrap', id: 'sheetWrap' })),
     );
 
+    root.appendChild(drawTbHost);
     root.appendChild(buildNoteBar());
     refreshNoteBar();
+  }
+
+  let sideToolBtns: { el: HTMLButtonElement; needsImages: boolean }[] = [];
+
+  function refreshSideTools(): void {
+    const has = !!activeReg;
+    sideToolBtns.forEach(({ el: b, needsImages }) => {
+      b.disabled = !has || (needsImages && !activeReg?.withImages);
+    });
+  }
+
+  function buildSideTools(): HTMLElement {
+    const fileInput = el('input', {
+      type: 'file',
+      accept: 'image/*',
+      multiple: 'true',
+      style: 'display:none',
+      onchange: (e: Event) => {
+        const t = e.target as HTMLInputElement;
+        const b = activeReg?.block;
+        if (b && 'imgs' in b) [...(t.files ?? [])].forEach((f) => void images.ingestFile(b, f));
+        t.value = '';
+      },
+    }) as HTMLInputElement;
+
+    sideToolBtns = [];
+
+    const tool = (
+      ico: string,
+      label: string,
+      desc: string,
+      fn: () => void,
+      needsImages: boolean,
+    ): HTMLButtonElement => {
+      const b = el('button', {
+        class: 'stool',
+        title: `${label} — ${desc}`,
+        onclick: fn,
+      }) as HTMLButtonElement;
+      b.append(
+        el('span', { class: 'stool-ico', html: ico }),
+        el('span', { class: 'stool-txt' }, [
+          el('span', { class: 'stool-lab', text: label }),
+          el('span', { class: 'stool-desc', text: desc }),
+        ]),
+      );
+      sideToolBtns.push({ el: b, needsImages });
+      return b;
+    };
+
+    const withImgBlock = (fn: (b: Parameters<typeof images.addCoordPlane>[0]) => void) => () => {
+      const b = activeReg?.block;
+      if (b && 'imgs' in b) fn(b);
+    };
+
+    const list = el('div', { class: 'stools' }, [
+      tool(Icons.image, '이미지', '파일에서 이미지 넣기', () => fileInput.click(), true),
+      tool(
+        Icons.axes,
+        '좌표평면',
+        '격자·축이 있는 좌표평면 삽입',
+        withImgBlock((b) => images.addCoordPlane(b)),
+        true,
+      ),
+      tool(
+        Icons.landscape,
+        '가로 정돈',
+        '이미지를 한 줄로 나란히',
+        withImgBlock((b) => images.arrangeImgsRow(b)),
+        true,
+      ),
+      tool(
+        Icons.portrait,
+        '세로 정돈',
+        '이미지를 위아래로 차곡차곡',
+        withImgBlock((b) => images.arrangeImgs(b)),
+        true,
+      ),
+      tool(
+        Icons.pencil,
+        '필기',
+        '선택한 칸에 그리기·텍스트',
+        () => activeReg?.drawBtn.click(),
+        false,
+      ),
+      fileInput,
+    ]);
+
+    refreshSideTools();
+
+    return el('div', { class: 'side-section' }, [
+      el('div', { class: 'side-h', text: '칸 도구' }),
+      el('div', { class: 'side-note tool-note', text: '칸을 클릭해 고른 뒤 사용하세요.' }),
+      list,
+    ]);
   }
 
   function paletteCard(
@@ -473,7 +615,7 @@ export function createApp(root: HTMLElement) {
     // 인쇄/PDF 저장 시 파일명이 학습지 제목이 되도록 문서 제목을 바꾼다.
     const baseDocTitle = document.title;
     window.addEventListener('beforeprint', () => {
-      document.title = safeTitle();
+      document.title = safeTitle() + (store.state.meta.note.on ? '_필기용' : '');
       const book = document.getElementById('sheetBook');
       const wrap = document.getElementById('sheetWrap');
       if (book) book.style.transform = 'none';

@@ -892,51 +892,13 @@ export function createImageService(ctx: ImageContext) {
     panel.addEventListener('drop', onDrop);
   }
 
-  function imgTools(block: ImageBlock): HTMLElement {
-    const input = el('input', {
-      type: 'file',
-      accept: 'image/*',
-      multiple: 'true',
-      style: 'display:none',
-      onchange: (e: Event) => {
-        const target = e.target as HTMLInputElement;
-        [...(target.files ?? [])].forEach((f) => void ingestFile(block, f));
-        target.value = '';
-      },
-    });
-    const add = el('button', {
-      class: 'minibtn',
-      html: Icons.image + '<span>이미지</span>',
-      title: '이미지 파일 추가',
-      onclick: () => input.click(),
-    });
-    const tidyRow = el('button', {
-      class: 'minibtn',
-      html: Icons.landscape + '<span>가로 정돈</span>',
-      title: '이미지를 한 줄로 나란히 정렬',
-      onclick: () => arrangeImgsRow(block),
-    });
-    const tidyCol = el('button', {
-      class: 'minibtn',
-      html: Icons.portrait + '<span>세로 정돈</span>',
-      title: '이미지를 세로로 차곡차곡 정렬',
-      onclick: () => arrangeImgs(block),
-    });
-    const plane = el('button', {
-      class: 'minibtn',
-      html: Icons.axes + '<span>좌표평면</span>',
-      title: '좌표평면 이미지 삽입',
-      onclick: () => addCoordPlane(block),
-    });
-    return el('div', { class: 'field-tools' }, [add, plane, tidyRow, tidyCol, input]);
-  }
-
   return {
     renderImages,
     reLayer,
     attachPaste,
     enableImageDrop,
-    imgTools,
+    ingestFile,
+    addCoordPlane,
     arrangeImgs,
     arrangeImgsRow,
     deselectImage,
