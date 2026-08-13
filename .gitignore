@@ -6,3 +6,5 @@ dist/
 firebase-debug.log
 firebase-debug.*.log
 .claude/
+.agents/
+skills-lock.json
