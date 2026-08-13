@@ -12,6 +12,28 @@ export interface ImageObj {
   w: number;
 }
 
+/** 필기 획: 레이어 폭/높이 대비 비율 좌표 목록 */
+export interface DrawStroke {
+  pts: [number, number][];
+  color: string;
+  /** 선 굵기(px) */
+  w: number;
+}
+
+/** 필기 텍스트: 레이어 좌상단 기준 비율 좌표 */
+export interface DrawText {
+  x: number;
+  y: number;
+  text: string;
+  size: number;
+  color: string;
+}
+
+export interface DrawSet {
+  strokes: DrawStroke[];
+  texts: DrawText[];
+}
+
 export interface BlockBase {
   id: number;
   type: BlockType;
@@ -25,6 +47,8 @@ export interface BlockBase {
   tagLabel?: string;
   /** 칩 자체 숨김 */
   tagHidden?: boolean;
+  /** 필드별 필기(그리기·텍스트) 데이터. 키: prob | sol | ex | cimg | main */
+  draws?: Record<string, DrawSet>;
 }
 
 export interface ProblemBlock extends BlockBase {

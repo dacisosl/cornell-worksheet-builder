@@ -191,6 +191,33 @@ export function createImageService(ctx: ImageContext) {
     reLayer(block);
   }
 
+  /** 가로 정돈: 이미지를 한 줄로 나란히, 같은 폭으로 배치 */
+  function arrangeImgsRow(block: ImageBlock): void {
+    const imgs = block.imgs ?? [];
+    if (!imgs.length) return;
+    const layer = blockLayer(block.id);
+    if (!layer) return;
+    const pw = layer.clientWidth;
+    const ph = layer.clientHeight;
+    const n = imgs.length;
+    const padX = 8 / pw;
+    const gap = 10 / pw;
+    const yPad = 8 / ph;
+    let w = (1 - padX * 2 - gap * (n - 1)) / n;
+    // 가장 세로로 긴 이미지가 칸 높이를 넘으면 전체를 축소
+    const maxH = Math.max(...imgs.map((im) => (w * pw * im.ar) / ph));
+    if (maxH > 1 - yPad * 2) w *= (1 - yPad * 2) / maxH;
+    let x = (1 - (n * w + gap * (n - 1))) / 2;
+    imgs.forEach((im) => {
+      im.w = w;
+      im.x = x;
+      im.y = yPad;
+      x += w + gap;
+    });
+    store.commit();
+    reLayer(block);
+  }
+
   function deleteSelectedImage(): boolean {
     if (!store.selected) return false;
     const b = store.findBlock(store.selected.b);
@@ -321,7 +348,12 @@ export function createImageService(ctx: ImageContext) {
     return { left: nl, top: nt };
   }
 
-  function imgToolbar(block: ImageBlock, im: ImageObj): HTMLElement {
+  function imgToolbar(
+    block: ImageBlock,
+    im: ImageObj,
+    obj: HTMLElement,
+    layer: HTMLElement,
+  ): HTMLElement {
     const bar = el('div', { class: 'img-tb' });
     const mk = (html: string, title: string, fn: () => void, cls = '') =>
       el('button', {
@@ -345,10 +377,239 @@ export function createImageService(ctx: ImageContext) {
         store.commit();
         reLayer(block);
       }),
+      mk(Icons.crop, '이미지 자르기', () => startCrop(block, im, obj, layer)),
       mk(Icons.sharp, '화질 보정 켜기/끄기', () => toggleSharp(block, im), im.sharpened ? 'on' : ''),
       mk(Icons.trash, '삭제', () => delImg(block, im), 'danger'),
     );
     return bar;
+  }
+
+  /** 이미지 자르기: 이미지 위에 자르기 상자를 띄우고, 적용 시 원본을 잘라 교체한다. */
+  function startCrop(
+    block: ImageBlock,
+    im: ImageObj,
+    obj: HTMLElement,
+    layer: HTMLElement,
+  ): void {
+    if ($('.crop-box', obj)) return;
+    obj.classList.add('cropping');
+    const st = { x: 0.08, y: 0.08, w: 0.84, h: 0.84 };
+
+    const box = el('div', { class: 'crop-box' });
+    const applyBox = () => {
+      box.style.left = st.x * 100 + '%';
+      box.style.top = st.y * 100 + '%';
+      box.style.width = st.w * 100 + '%';
+      box.style.height = st.h * 100 + '%';
+    };
+    applyBox();
+
+    (['nw', 'ne', 'sw', 'se'] as const).forEach((c) =>
+      box.appendChild(el('span', { class: 'cbh ' + c, data: { c } })),
+    );
+
+    const actions = el('div', { class: 'crop-actions' }, [
+      el('button', {
+        class: 'cab ok',
+        title: '자르기 적용',
+        html: Icons.check,
+        onpointerdown: (e: Event) => e.stopPropagation(),
+        onclick: (e: Event) => {
+          e.stopPropagation();
+          void applyCrop();
+        },
+      }),
+      el('button', {
+        class: 'cab',
+        title: '취소',
+        html: '&times;',
+        onpointerdown: (e: Event) => e.stopPropagation(),
+        onclick: (e: Event) => {
+          e.stopPropagation();
+          cleanup();
+        },
+      }),
+    ]);
+    box.appendChild(actions);
+    obj.appendChild(box);
+
+    function cleanup(): void {
+      box.remove();
+      obj.classList.remove('cropping');
+    }
+
+    function dragCrop(pe: PointerEvent, mode: string): void {
+      pe.preventDefault();
+      pe.stopPropagation();
+      const r = obj.getBoundingClientRect();
+      const s0 = { ...st };
+      const sx = pe.clientX;
+      const sy = pe.clientY;
+      const tgt = pe.target as HTMLElement;
+      tgt.setPointerCapture(pe.pointerId);
+      const mv = (ev: Event) => {
+        const p = ev as PointerEvent;
+        const dx = (p.clientX - sx) / r.width;
+        const dy = (p.clientY - sy) / r.height;
+        if (mode === 'move') {
+          st.x = Math.min(Math.max(0, s0.x + dx), 1 - s0.w);
+          st.y = Math.min(Math.max(0, s0.y + dy), 1 - s0.h);
+        } else {
+          let x1 = s0.x;
+          let y1 = s0.y;
+          let x2 = s0.x + s0.w;
+          let y2 = s0.y + s0.h;
+          if (mode.includes('w')) x1 = Math.min(Math.max(0, x1 + dx), x2 - 0.05);
+          if (mode.includes('e')) x2 = Math.max(Math.min(1, x2 + dx), x1 + 0.05);
+          if (mode.includes('n')) y1 = Math.min(Math.max(0, y1 + dy), y2 - 0.05);
+          if (mode.includes('s')) y2 = Math.max(Math.min(1, y2 + dy), y1 + 0.05);
+          st.x = x1;
+          st.y = y1;
+          st.w = x2 - x1;
+          st.h = y2 - y1;
+        }
+        applyBox();
+      };
+      const up = () => {
+        tgt.removeEventListener('pointermove', mv);
+        tgt.removeEventListener('pointerup', up);
+      };
+      tgt.addEventListener('pointermove', mv);
+      tgt.addEventListener('pointerup', up);
+    }
+
+    box.addEventListener('pointerdown', ((e: Event) => {
+      const pe = e as PointerEvent;
+      const t = pe.target as HTMLElement;
+      if (t.classList.contains('cbh')) {
+        dragCrop(pe, t.dataset.c!);
+        return;
+      }
+      if (t.closest('.crop-actions')) return;
+      dragCrop(pe, 'move');
+    }) as EventListener);
+
+    async function applyCrop(): Promise<void> {
+      try {
+        const img = await loadImage(im.src);
+        const nw = img.naturalWidth;
+        const nh = img.naturalHeight;
+        const sx = Math.round(st.x * nw);
+        const sy = Math.round(st.y * nh);
+        const sw = Math.max(1, Math.round(st.w * nw));
+        const sh = Math.max(1, Math.round(st.h * nh));
+        const c = document.createElement('canvas');
+        c.width = sw;
+        c.height = sh;
+        const g = c.getContext('2d');
+        if (!g) {
+          cleanup();
+          return;
+        }
+        g.drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
+        const src = c.toDataURL('image/png');
+
+        // 잘린 영역이 화면상 제자리에 남도록 배치를 보정한다.
+        const pw = layer.clientWidth || 1;
+        const ph = layer.clientHeight || 1;
+        const oldW = im.w;
+        const oldHpx = oldW * pw * im.ar;
+        im.x = im.x + st.x * oldW;
+        im.y = im.y + (st.y * oldHpx) / ph;
+        im.w = oldW * st.w;
+        im.ar = sh / sw;
+        im.src = src;
+        const cropped = await loadImage(src);
+        im.sharpSrc = unsharp(cropped);
+        im.sharpened = im.sharpened && !!im.sharpSrc;
+        cleanup();
+        clampImg(block, im);
+        store.commit();
+        reLayer(block);
+      } catch {
+        cleanup();
+      }
+    }
+  }
+
+  /** 좌표평면 이미지를 캔버스로 그려 dataURL로 만든다. */
+  function coordPlaneDataURL(): string {
+    const size = 800;
+    const cells = 10;
+    const step = size / cells;
+    const c = document.createElement('canvas');
+    c.width = size;
+    c.height = size;
+    const g = c.getContext('2d')!;
+
+    g.fillStyle = '#ffffff';
+    g.fillRect(0, 0, size, size);
+
+    g.strokeStyle = '#ccd1d9';
+    g.lineWidth = 1;
+    for (let i = 0; i <= cells; i++) {
+      const p = Math.round(i * step) + 0.5;
+      g.beginPath();
+      g.moveTo(0, p);
+      g.lineTo(size, p);
+      g.stroke();
+      g.beginPath();
+      g.moveTo(p, 0);
+      g.lineTo(p, size);
+      g.stroke();
+    }
+
+    const mid = size / 2;
+    g.strokeStyle = '#2b2e33';
+    g.fillStyle = '#2b2e33';
+    g.lineWidth = 2.5;
+    g.beginPath();
+    g.moveTo(0, mid);
+    g.lineTo(size, mid);
+    g.moveTo(mid, 0);
+    g.lineTo(mid, size);
+    g.stroke();
+
+    // 화살촉 (x축 오른쪽, y축 위쪽)
+    g.beginPath();
+    g.moveTo(size, mid);
+    g.lineTo(size - 14, mid - 6);
+    g.lineTo(size - 14, mid + 6);
+    g.closePath();
+    g.fill();
+    g.beginPath();
+    g.moveTo(mid, 0);
+    g.lineTo(mid - 6, 14);
+    g.lineTo(mid + 6, 14);
+    g.closePath();
+    g.fill();
+
+    g.font = 'italic 26px Georgia, serif';
+    g.fillText('x', size - 24, mid + 28);
+    g.fillText('y', mid + 12, 26);
+    g.font = '24px Georgia, serif';
+    g.fillText('O', mid - 26, mid + 26);
+
+    return c.toDataURL('image/png');
+  }
+
+  function addCoordPlane(block: ImageBlock): void {
+    const src = coordPlaneDataURL();
+    block.imgs = block.imgs ?? [];
+    const id = store.nextImgId();
+    block.imgs.push({
+      id,
+      src,
+      sharpSrc: null,
+      sharpened: false,
+      ar: 1,
+      x: 0.28,
+      y: 0.04,
+      w: 0.44,
+    });
+    store.commit();
+    render();
+    selectImage(block.id, id);
   }
 
   function enableImgMove(
@@ -493,7 +754,7 @@ export function createImageService(ctx: ImageContext) {
       const obj = el('div', { class: 'imgobj', data: { img: String(im.id) } });
       const pic = el('img', { src: dispSrc(im), draggable: 'false' });
       obj.appendChild(pic);
-      obj.appendChild(imgToolbar(block, im));
+      obj.appendChild(imgToolbar(block, im, obj, layer));
       (['nw', 'ne', 'sw', 'se'] as const).forEach((c) =>
         obj.appendChild(el('span', { class: 'ihandle ' + c, data: { corner: c } })),
       );
@@ -571,13 +832,25 @@ export function createImageService(ctx: ImageContext) {
       title: '이미지 파일 추가',
       onclick: () => input.click(),
     });
-    const tidy = el('button', {
+    const tidyRow = el('button', {
       class: 'minibtn',
-      html: Icons.grid2 + '<span>정돈</span>',
-      title: '이미지 오·열 자동 정렬',
+      html: Icons.landscape + '<span>가로 정돈</span>',
+      title: '이미지를 한 줄로 나란히 정렬',
+      onclick: () => arrangeImgsRow(block),
+    });
+    const tidyCol = el('button', {
+      class: 'minibtn',
+      html: Icons.portrait + '<span>세로 정돈</span>',
+      title: '이미지를 세로로 차곡차곡 정렬',
       onclick: () => arrangeImgs(block),
     });
-    return el('div', { class: 'field-tools' }, [add, tidy, input]);
+    const plane = el('button', {
+      class: 'minibtn',
+      html: Icons.axes + '<span>좌표평면</span>',
+      title: '좌표평면 이미지 삽입',
+      onclick: () => addCoordPlane(block),
+    });
+    return el('div', { class: 'field-tools' }, [add, plane, tidyRow, tidyCol, input]);
   }
 
   return {
@@ -587,6 +860,7 @@ export function createImageService(ctx: ImageContext) {
     enableImageDrop,
     imgTools,
     arrangeImgs,
+    arrangeImgsRow,
     deselectImage,
     deleteSelectedImage,
     blockLayer,

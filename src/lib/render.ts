@@ -1,5 +1,6 @@
 import { CONTENT_H, DEFAULTS, TITLE_SIZE_DEFAULT, TITLE_SIZE_MAX, TITLE_SIZE_MIN, TITLE_SIZE_STEP } from '../constants';
 import { makeBlock, sizeLabel } from './blocks';
+import type { DrawService } from './draw';
 import type { ImageService } from './images';
 import type { Interactions } from './interactions';
 import type { PageBook } from './pagination';
@@ -12,12 +13,24 @@ export interface RenderContext {
   store: Store;
   images: ImageService;
   interactions: Interactions;
+  draw: DrawService;
   pageBook: PageBook;
   paginateSoon: () => void;
 }
 
 export function createRenderer(ctx: RenderContext) {
-  const { store, images, interactions, pageBook, paginateSoon } = ctx;
+  const { store, images, interactions, draw, pageBook, paginateSoon } = ctx;
+
+  /** 패널에 필기 레이어를 붙이고 연필 버튼을 필드 도구 모음(우하단)에 넣는다. */
+  function attachDrawTools(panel: HTMLElement, b: Block, key: string): void {
+    const btn = draw.attach(panel, b, key);
+    let tools = $('.field-tools', panel) as HTMLElement | null;
+    if (!tools) {
+      tools = el('div', { class: 'field-tools' });
+      panel.appendChild(tools);
+    }
+    tools.appendChild(btn);
+  }
 
   function syncFromDOM(): void {
     const book = $('#sheetBook');
@@ -235,7 +248,14 @@ export function createRenderer(ctx: RenderContext) {
       pop.appendChild(
         el('button', {
           class: 'pop-btn',
-          html: Icons.grid2 + '<span>이미지 오·열 정돈</span>',
+          html: Icons.landscape + '<span>이미지 가로 정돈</span>',
+          onclick: () => images.arrangeImgsRow(b),
+        }),
+      );
+      pop.appendChild(
+        el('button', {
+          class: 'pop-btn',
+          html: Icons.portrait + '<span>이미지 세로 정돈</span>',
           onclick: () => images.arrangeImgs(b),
         }),
       );
@@ -245,7 +265,14 @@ export function createRenderer(ctx: RenderContext) {
       pop.appendChild(
         el('button', {
           class: 'pop-btn',
-          html: Icons.grid2 + '<span>이미지 오·열 정돈</span>',
+          html: Icons.landscape + '<span>이미지 가로 정돈</span>',
+          onclick: () => images.arrangeImgsRow(b),
+        }),
+      );
+      pop.appendChild(
+        el('button', {
+          class: 'pop-btn',
+          html: Icons.portrait + '<span>이미지 세로 정돈</span>',
           onclick: () => images.arrangeImgs(b),
         }),
       );
@@ -464,11 +491,13 @@ export function createRenderer(ctx: RenderContext) {
 
     images.attachPaste(prob, b);
     images.enableImageDrop(probPanel, b);
+    attachDrawTools(probPanel, b, 'prob');
 
     const solPanel = el('div', { class: 'panel', style: 'flex:1' }, [
       panelLines(b.solBg),
       sol,
     ]);
+    attachDrawTools(solPanel, b, 'sol');
 
     if (b.type === 'problem') {
       probPanel.style.flex = String(b.ratio);
@@ -556,12 +585,14 @@ export function createRenderer(ctx: RenderContext) {
     ]);
     images.attachPaste(fld, b);
     images.enableImageDrop(panel, b);
+    attachDrawTools(panel, b, 'cimg');
     return { panel, layer };
   }
 
   function renderConceptBody(node: HTMLElement, b: ConceptBlock): void {
     const ex = field('f-ex', '', b.exHtml);
     const exPanel = el('div', { class: 'panel', style: 'flex:1' }, [panelLines(b.exBg, b.tint), ex]);
+    attachDrawTools(exPanel, b, 'ex');
 
     if (b.imgMode === 'none') {
       node.appendChild(el('div', { class: 'bbody col' }, [exPanel]));
@@ -598,6 +629,7 @@ export function createRenderer(ctx: RenderContext) {
 
     images.attachPaste(drop, b);
     images.enableImageDrop(panel, b);
+    attachDrawTools(panel, b, 'main');
 
     if (b.titleHidden == null) b.titleHidden = true;
 
@@ -677,9 +709,11 @@ export function createRenderer(ctx: RenderContext) {
     ]);
   }
 
-  function addBlock(type: Block['type']): void {
+  function addBlock(type: Block['type'], opts?: { width?: 'full' | 'half' }): void {
     syncFromDOM();
-    store.state.blocks.push(makeBlock(store, type));
+    const blk = makeBlock(store, type);
+    if (blk.type === 'image' && opts?.width) blk.width = opts.width;
+    store.state.blocks.push(blk);
     store.commit();
     render();
   }

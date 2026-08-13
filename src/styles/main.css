@@ -133,6 +133,33 @@ button { font-family: inherit; cursor: pointer; }
   text-transform: uppercase; color: var(--ink-faint);
   margin: 4px 4px 12px; white-space: nowrap;
 }
+
+/* ── 사이드바 간결모드(아이콘만) ── */
+.side-toggle {
+  width: 100%; display: flex; align-items: center; justify-content: flex-end; gap: 6px;
+  border: 1px solid var(--line); background: var(--panel-2); color: var(--ink-soft);
+  border-radius: var(--r-md); padding: 5px 9px; font-size: 11.5px; font-weight: 600;
+  margin-bottom: 14px; line-height: 1;
+}
+.side-toggle:hover { color: var(--accent); border-color: var(--accent); }
+.app.side-collapsed {
+  grid-template-columns: 72px 1fr;
+}
+.app.side-collapsed .brand { padding: 0; justify-content: center; }
+.app.side-collapsed .brand h1 { display: none; }
+.app.side-collapsed .sidebar { padding: 12px 8px 40px; }
+.app.side-collapsed .side-toggle { justify-content: center; padding: 6px 0; font-size: 15px; }
+.app.side-collapsed .side-h,
+.app.side-collapsed .pcard .ptitle,
+.app.side-collapsed .pcard .pdesc,
+.app.side-collapsed .side-note,
+.app.side-collapsed .opt-row { display: none; }
+.app.side-collapsed .palette { gap: 8px; }
+.app.side-collapsed .pcard {
+  grid-template-columns: 1fr; padding: 5px; justify-items: center;
+}
+.app.side-collapsed .pcard .pthumb { width: 100%; max-width: 54px; height: 44px; }
+.app.side-collapsed .side-section + .side-section { margin-top: 14px; }
 .side-section + .side-section { margin-top: 26px; }
 
 .palette { display: flex; flex-direction: column; gap: 12px; }
@@ -351,14 +378,25 @@ button { font-family: inherit; cursor: pointer; }
   border-radius: 4px 4px 0 0;
 }
 
-/* 제목행 숨김(컴팩트) 모드: 컨트롤만 남겨 내용이 바로 시작하도록 */
+/* 제목행 숨김(컴팩트) 모드: 틀을 완전히 없애고, 컨트롤은 호버 시 우상단에 떠서 표시 */
 .bhead.compact {
-  padding: 4px 6px;
+  position: absolute; top: 2px; right: 2px; z-index: 8;
+  padding: 0;
   justify-content: flex-end;
   background: transparent;
   border-bottom: 0;
+  opacity: 0; pointer-events: none; transition: opacity .12s;
 }
-.bhead.compact .bctrl { margin-left: 0; }
+.block:hover .bhead.compact,
+.bhead.compact:has(.popover.open) { opacity: 1; pointer-events: auto; }
+.bhead.compact .bctrl {
+  margin-left: 0;
+  background: rgba(255,255,255,.95);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 2px;
+  box-shadow: 0 2px 8px rgba(40,38,32,.12);
+}
 .bhead.compact .icbtn { width: 26px; height: 26px; }
 .btag {
   display: inline-flex; align-items: center; gap: 5px;
@@ -616,12 +654,12 @@ button { font-family: inherit; cursor: pointer; }
 .hdiv.adjustable.dragging::before { background: var(--accent); box-shadow: 0 0 0 2px rgba(46,75,115,.25); }
 
 .field-tools {
-  position: absolute; top: 5px; right: 6px; z-index: 6;
+  position: absolute; bottom: 6px; right: 6px; z-index: 6;
   display: flex; gap: 4px; opacity: 0; transition: opacity .12s;
-  pointer-events: none;
+  pointer-events: none; flex-wrap: wrap; justify-content: flex-end;
 }
-.imgpanel:hover .field-tools,
-.imgpanel:focus-within .field-tools {
+.panel:hover .field-tools,
+.panel:focus-within .field-tools {
   opacity: 1;
   pointer-events: auto;
 }
@@ -672,6 +710,98 @@ button { font-family: inherit; cursor: pointer; }
 .galign { position: absolute; background: var(--accent-2); pointer-events: none; z-index: 7; opacity: .85; }
 .galign.v { width: 1px; top: 0; bottom: 0; }
 .galign.h { height: 1px; left: 0; right: 0; }
+
+/* ── 이미지 자르기 ── */
+.imgobj.cropping { cursor: default; }
+.imgobj.cropping img { pointer-events: none; }
+.crop-box {
+  position: absolute; z-index: 4;
+  border: 1.5px dashed var(--accent);
+  box-shadow: 0 0 0 9999px rgba(30, 30, 30, .38);
+  cursor: move; touch-action: none;
+}
+.cbh {
+  position: absolute; width: 13px; height: 13px;
+  background: #fff; border: 1.5px solid var(--accent);
+  border-radius: 3px; z-index: 2; touch-action: none;
+}
+.cbh.nw { left: -7px; top: -7px; cursor: nwse-resize; }
+.cbh.ne { right: -7px; top: -7px; cursor: nesw-resize; }
+.cbh.sw { left: -7px; bottom: -7px; cursor: nesw-resize; }
+.cbh.se { right: -7px; bottom: -7px; cursor: nwse-resize; }
+.crop-actions {
+  position: absolute; right: 4px; bottom: 4px; z-index: 3;
+  display: flex; gap: 3px;
+}
+.cab {
+  width: 28px; height: 28px; border: 1px solid var(--line);
+  background: #fff; color: var(--ink-soft); border-radius: 7px;
+  display: grid; place-items: center; font-size: 16px; font-weight: 700;
+  box-shadow: 0 1px 4px rgba(40,38,32,.18);
+}
+.cab svg { width: 15px; height: 15px; }
+.cab.ok { background: var(--accent); border-color: var(--accent); color: #fff; }
+.cab:hover { filter: brightness(1.05); }
+
+/* ── 필기(그리기·텍스트) 레이어 ── */
+.draw-layer {
+  position: absolute; inset: 0; z-index: 5;
+  pointer-events: none; overflow: hidden;
+  touch-action: none;
+}
+.draw-layer svg { display: block; position: absolute; inset: 0; }
+.panel.drawing .draw-layer { pointer-events: auto; cursor: crosshair; }
+.panel.drawing .draw-layer.text-mode { cursor: text; }
+.panel.drawing .draw-layer.erase { cursor: pointer; }
+.draw-layer svg path { pointer-events: none; }
+.panel.drawing .draw-layer.erase svg path { pointer-events: stroke; }
+.panel.drawing { box-shadow: inset 0 0 0 2px var(--accent-soft); }
+
+.dtext {
+  position: absolute; z-index: 6;
+  min-width: 12px; max-width: 92%;
+  line-height: 1.35; white-space: pre-wrap; word-break: break-word;
+  pointer-events: none;
+}
+.panel.drawing .dtext { pointer-events: auto; }
+.dt-body {
+  display: inline-block; outline: none; min-width: 10px;
+  border-radius: 3px; padding: 0 2px;
+}
+.panel.drawing .dt-body { background: rgba(255,255,255,.55); box-shadow: 0 0 0 1px var(--line); }
+.panel.drawing .dt-body:focus { box-shadow: 0 0 0 1.5px var(--accent); background: #fff; }
+.dt-drag {
+  display: none; position: absolute; left: -16px; top: 1px;
+  width: 14px; height: 14px; color: var(--ink-faint); cursor: grab;
+  touch-action: none;
+}
+.dt-drag svg { width: 14px; height: 14px; }
+.panel.drawing .dt-drag { display: inline-block; }
+
+.draw-tb {
+  position: absolute; top: 5px; right: 6px; z-index: 9;
+  display: flex; align-items: center; gap: 2px;
+  background: #fff; border: 1px solid var(--line); border-radius: 9px;
+  padding: 3px; box-shadow: var(--shadow-card); white-space: nowrap;
+}
+.dtb {
+  min-width: 27px; height: 27px; border: none; background: transparent;
+  border-radius: 6px; color: var(--ink-soft);
+  display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+  font-size: 11.5px; font-weight: 700; padding: 0 5px;
+}
+.dtb:hover { background: var(--panel-2); color: var(--accent); }
+.dtb.on { background: var(--accent-soft); color: var(--accent); }
+.dtb.done { color: var(--accent); }
+.dtb svg { width: 14px; height: 14px; }
+.dtb-sep { width: 1px; height: 16px; background: var(--line); margin: 0 3px; }
+.dsw {
+  width: 16px; height: 16px; border-radius: 50%;
+  border: 2px solid #fff; box-shadow: 0 0 0 1px var(--line);
+  padding: 0; flex: none;
+}
+.dsw.on { box-shadow: 0 0 0 2px var(--accent); }
+.minibtn.on { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
 
 .resize-h {
   height: 14px; cursor: grab; position: relative; flex: none;
@@ -829,7 +959,14 @@ button { font-family: inherit; cursor: pointer; }
   .size-badge,
   .ihandle,
   .img-tb,
+  .draw-tb,
+  .dt-drag,
+  .crop-box,
+  .bhead.compact,
   .galign { display: none !important; }
+
+  /* 필기 텍스트는 인쇄에 그대로 표시 (편집용 배경만 제거) */
+  .dt-body { background: transparent !important; box-shadow: none !important; }
 
   .block.over::after { display: none !important; }
 

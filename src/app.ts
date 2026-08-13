@@ -1,6 +1,7 @@
 import { PAGINATE_DEBOUNCE_MS, ZOOM_MAX, ZOOM_MIN, ZOOM_STEP } from './constants';
 import { makeBlock } from './lib/blocks';
 import { hasImages } from './lib/blocks';
+import { createDrawService } from './lib/draw';
 import { createImageService } from './lib/images';
 import { createInteractions } from './lib/interactions';
 import { createPagination } from './lib/pagination';
@@ -39,6 +40,7 @@ export function createApp(root: HTMLElement) {
 
   const render = () => renderer.render();
   images = createImageService({ store, render });
+  const draw = createDrawService({ store });
 
   const interactions = createInteractions({
     store,
@@ -48,7 +50,7 @@ export function createApp(root: HTMLElement) {
     paginate: () => pagination.paginate(),
   });
 
-  renderer = createRenderer({ store, images, interactions, pageBook: pagination, paginateSoon });
+  renderer = createRenderer({ store, images, interactions, draw, pageBook: pagination, paginateSoon });
 
   function setZoom(z: number): void {
     store.setZoom(Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z)));
@@ -63,13 +65,23 @@ export function createApp(root: HTMLElement) {
     applyZoom();
   }
 
+  function safeTitle(): string {
+    return (store.state.meta.title || '학습지').replace(/[^\w가-힣\s-]/g, '').trim() || '학습지';
+  }
+
+  function dateStamp(): string {
+    const d = new Date();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${d.getFullYear()}-${mm}-${dd}`;
+  }
+
   function exportWorksheet(): void {
     const blob = new Blob([store.exportJSON()], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    const title = (store.state.meta.title || '학습지').replace(/[^\w가-힣\s-]/g, '').trim() || '학습지';
     a.href = url;
-    a.download = `${title}.cornell.json`;
+    a.download = `${safeTitle()}_${dateStamp()}.cornell.json`;
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -143,6 +155,30 @@ export function createApp(root: HTMLElement) {
     );
 
     const sidebar = el('aside', { class: 'sidebar' });
+
+    // 간결모드: 사이드바를 접어 블록 팔레트를 아이콘(썸네일)만 표시
+    const SIDE_KEY = 'cornell-side-collapsed';
+    if (localStorage.getItem(SIDE_KEY) === '1') root.classList.add('side-collapsed');
+    const sideToggle = el('button', {
+      class: 'side-toggle',
+      title: '사이드바 접기/펼치기',
+      onclick: () => {
+        const on = root.classList.toggle('side-collapsed');
+        try {
+          localStorage.setItem(SIDE_KEY, on ? '1' : '0');
+        } catch {
+          /* ignore */
+        }
+        refreshSideToggle();
+      },
+    });
+    function refreshSideToggle(): void {
+      const on = root.classList.contains('side-collapsed');
+      sideToggle.innerHTML = on ? '&raquo;' : '<span>간결모드</span>&laquo;';
+    }
+    refreshSideToggle();
+    sidebar.appendChild(sideToggle);
+
     sidebar.appendChild(
       el('div', { class: 'side-section' }, [
         el('div', { class: 'side-h', text: '블록 추가' }),
@@ -151,6 +187,7 @@ export function createApp(root: HTMLElement) {
           paletteCard('concept', '개념설명', '개념 이름 · 설명 세로 배열. 줄글/격자, 연한 배경 선택.', thumbConcept()),
           paletteCard('mock', '모의고사', '가로 A4 ½ 폭 · 세로 2단. 문제 위, 긴 풀이 아래. 두 개가 나란히.', thumbMock()),
           paletteCard('image', '이미지 전용', '텍스트 없이 이미지만 자유 배치. 높이·폭(½/전체) 조절 가능.', thumbImageOnly()),
+          paletteCard('image', '이미지 전용 (반칸)', '가로 ½ 폭 이미지 블록. 두 개가 나란히 배치됩니다.', thumbImageHalf(), { width: 'half' }),
         ]),
       ]),
     );
@@ -199,8 +236,14 @@ export function createApp(root: HTMLElement) {
     );
   }
 
-  function paletteCard(type: BlockType, title: string, desc: string, thumb: HTMLElement) {
-    return el('button', { class: 'pcard', onclick: () => renderer.addBlock(type) }, [
+  function paletteCard(
+    type: BlockType,
+    title: string,
+    desc: string,
+    thumb: HTMLElement,
+    opts?: { width?: 'full' | 'half' },
+  ) {
+    return el('button', { class: 'pcard', title, onclick: () => renderer.addBlock(type, opts) }, [
       el('div', { class: 'pthumb' }, thumb),
       el('div', {}, [el('p', { class: 'ptitle', text: title }), el('p', { class: 'pdesc', text: desc })]),
     ]);
@@ -232,6 +275,13 @@ export function createApp(root: HTMLElement) {
 
   function thumbImageOnly() {
     return el('div', { class: 'th-col' }, [el('div', { class: 'th-box fill', style: 'flex:1' })]);
+  }
+
+  function thumbImageHalf() {
+    return el('div', { class: 'th-row' }, [
+      el('div', { class: 'th-box fill', style: 'flex:1' }),
+      el('div', { style: 'flex:1' }),
+    ]);
   }
 
   function optRow(label: string, val: boolean, fn: (v: boolean) => void) {
@@ -282,7 +332,10 @@ export function createApp(root: HTMLElement) {
       }
     });
 
+    // 인쇄/PDF 저장 시 파일명이 학습지 제목이 되도록 문서 제목을 바꾼다.
+    const baseDocTitle = document.title;
     window.addEventListener('beforeprint', () => {
+      document.title = safeTitle();
       const book = document.getElementById('sheetBook');
       const wrap = document.getElementById('sheetWrap');
       if (book) book.style.transform = 'none';
@@ -291,6 +344,7 @@ export function createApp(root: HTMLElement) {
       pagination.paginate();
     });
     window.addEventListener('afterprint', () => {
+      document.title = baseDocTitle;
       document.body.classList.remove('is-printing');
       applyZoom();
     });
