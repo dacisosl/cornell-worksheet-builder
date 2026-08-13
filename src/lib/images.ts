@@ -218,6 +218,49 @@ export function createImageService(ctx: ImageContext) {
     reLayer(block);
   }
 
+  /** 앱 내부 이미지 클립보드 — 시스템 클립보드가 막혀도 붙여넣기가 되도록 보관 */
+  let clipImg: string | null = null;
+
+  function toast(msg: string): void {
+    let t = $('#imgToast') as HTMLElement | null;
+    if (!t) {
+      t = el('div', { class: 'app-toast', id: 'imgToast' });
+      document.body.appendChild(t);
+    }
+    t.textContent = msg;
+    t.classList.add('on');
+    window.clearTimeout(+(t.dataset.timer ?? 0));
+    t.dataset.timer = String(window.setTimeout(() => t?.classList.remove('on'), 1600));
+  }
+
+  /** 선택된 이미지를 PNG로 시스템 클립보드에 복사한다. */
+  async function copyImage(im: ImageObj): Promise<void> {
+    // 시스템 클립보드가 막혀도 앱 안에서는 붙여넣을 수 있도록 먼저 보관한다.
+    clipImg = im.src;
+    toast('이미지를 복사했어요. 붙여넣을 칸에서 Ctrl+V');
+    try {
+      const img = await loadImage(dispSrc(im));
+      const c = document.createElement('canvas');
+      c.width = img.naturalWidth;
+      c.height = img.naturalHeight;
+      c.getContext('2d')?.drawImage(img, 0, 0);
+      const blob = await new Promise<Blob | null>((r) => c.toBlob(r, 'image/png'));
+      if (blob) await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+    } catch {
+      /* 시스템 클립보드 사용 불가 — 내부 복사본으로 붙여넣기 */
+    }
+  }
+
+  function copySelectedImage(): boolean {
+    if (!store.selected) return false;
+    const b = store.findBlock(store.selected.b);
+    if (!b || !hasImages(b)) return false;
+    const im = (b.imgs ?? []).find((x) => x.id === store.selected!.i);
+    if (!im) return false;
+    void copyImage(im);
+    return true;
+  }
+
   function deleteSelectedImage(): boolean {
     if (!store.selected) return false;
     const b = store.findBlock(store.selected.b);
@@ -228,19 +271,53 @@ export function createImageService(ctx: ImageContext) {
     return true;
   }
 
-  document.addEventListener('keydown', (e) => {
-    if (e.key !== 'Delete') return;
-    // 텍스트 편집 중에는 브라우저 기본 동작을 우선한다.
+  function isTextEditing(): boolean {
     const a = document.activeElement as HTMLElement | null;
-    const isTextEditing =
+    return (
       !!a &&
       (a.tagName === 'INPUT' ||
         a.tagName === 'TEXTAREA' ||
         a.isContentEditable ||
-        !!a.closest('[contenteditable="true"]'));
-    if (isTextEditing) return;
+        !!a.closest('[contenteditable="true"]'))
+    );
+  }
 
-    if (deleteSelectedImage()) e.preventDefault();
+  document.addEventListener('keydown', (e) => {
+    // 텍스트 편집 중에는 브라우저 기본 동작을 우선한다.
+    if (isTextEditing()) return;
+
+    if (e.key === 'Delete') {
+      if (deleteSelectedImage()) e.preventDefault();
+      return;
+    }
+
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'c' || e.key === 'C')) {
+      if (copySelectedImage()) e.preventDefault();
+    }
+  });
+
+  // 필드 밖(이미지 선택 상태)에서의 붙여넣기 — 선택된 이미지가 있는 칸에 넣는다.
+  document.addEventListener('paste', (e) => {
+    if (isTextEditing()) return;
+    if (!store.selected) return;
+    const b = store.findBlock(store.selected.b);
+    if (!b || !hasImages(b)) return;
+
+    for (const it of e.clipboardData?.items ?? []) {
+      if (it.type?.startsWith('image/')) {
+        const f = it.getAsFile();
+        if (f) {
+          e.preventDefault();
+          void ingestFile(b, f);
+          return;
+        }
+      }
+    }
+
+    if (clipImg) {
+      e.preventDefault();
+      void ingestDataURL(b, clipImg);
+    }
   });
 
   function positionImg(obj: HTMLElement, im: ImageObj, layer: HTMLElement): void {
@@ -377,6 +454,7 @@ export function createImageService(ctx: ImageContext) {
         store.commit();
         reLayer(block);
       }),
+      mk(Icons.copy, '복사 (Ctrl+C) — 다른 칸에 Ctrl+V로 붙여넣기', () => void copyImage(im)),
       mk(Icons.crop, '이미지 자르기', () => startCrop(block, im, obj, layer)),
       mk(Icons.sharp, '화질 보정 켜기/끄기', () => toggleSharp(block, im), im.sharpened ? 'on' : ''),
       mk(Icons.trash, '삭제', () => delImg(block, im), 'danger'),
@@ -625,7 +703,7 @@ export function createImageService(ctx: ImageContext) {
       const pe = e as PointerEvent;
       pe.preventDefault();
       selectImage(block.id, im.id);
-      const z = store.getZoom();
+      const z = store.getEffectiveScale();
       const pw = layer.clientWidth;
       const ph = layer.clientHeight;
       const w = im.w * pw;
@@ -689,7 +767,7 @@ export function createImageService(ctx: ImageContext) {
         pe.preventDefault();
         pe.stopPropagation();
         selectImage(block.id, im.id);
-        const z = store.getZoom();
+        const z = store.getEffectiveScale();
         const pw = layer.clientWidth;
         const ph = layer.clientHeight;
         const corner = hd.getAttribute('data-corner')!;
@@ -863,6 +941,7 @@ export function createImageService(ctx: ImageContext) {
     arrangeImgsRow,
     deselectImage,
     deleteSelectedImage,
+    copySelectedImage,
     blockLayer,
   };
 }

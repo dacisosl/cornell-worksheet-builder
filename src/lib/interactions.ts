@@ -85,7 +85,7 @@ export function createInteractions(ctx: InteractionContext) {
     handle.addEventListener('pointerdown', (e) => {
       e.preventDefault();
       e.stopPropagation();
-      const z = store.getZoom();
+      const z = store.getEffectiveScale();
       const startY = e.clientY;
       const startH = b.h;
       handle.setPointerCapture(e.pointerId);

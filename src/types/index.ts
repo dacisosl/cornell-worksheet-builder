@@ -34,6 +34,18 @@ export interface DrawSet {
   texts: DrawText[];
 }
 
+/** 필기 데이터를 보관할 수 있는 대상(블록 또는 학습지 메타) */
+export interface DrawHolder {
+  draws?: Record<string, DrawSet>;
+}
+
+/** 필기용(여백 확보) 모드 설정 */
+export interface NoteSettings {
+  on: boolean;
+  /** 좌우 여백(mm). 이 값에서 축소 비율이 계산된다. */
+  margin: number;
+}
+
 export interface BlockBase {
   id: number;
   type: BlockType;
@@ -100,13 +112,15 @@ export type Block = ProblemBlock | MockBlock | ConceptBlock | ImageOnlyBlock;
 /** 자유배치 이미지를 가지는 블록 */
 export type ImageBlock = ProblemBlock | MockBlock | ConceptBlock | ImageOnlyBlock;
 
-export interface AppMeta {
+export interface AppMeta extends DrawHolder {
   title: string;
   /** 2쪽 이후 헤더에 표시할 이어서 제목 (비어 있으면 title 사용) */
   contTitle: string;
   showHead: boolean;
   grid: boolean;
   pageFit: boolean;
+  /** 필기용 모드 — 본문을 줄이고 여백에 메모를 넣는다 */
+  note: NoteSettings;
 }
 
 export interface AppState {

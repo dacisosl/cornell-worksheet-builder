@@ -21,15 +21,36 @@ export interface RenderContext {
 export function createRenderer(ctx: RenderContext) {
   const { store, images, interactions, draw, pageBook, paginateSoon } = ctx;
 
-  /** 패널에 필기 레이어를 붙이고 연필 버튼을 필드 도구 모음(우하단)에 넣는다. */
-  function attachDrawTools(panel: HTMLElement, b: Block, key: string): void {
-    const btn = draw.attach(panel, b, key);
-    let tools = $('.field-tools', panel) as HTMLElement | null;
-    if (!tools) {
-      tools = el('div', { class: 'field-tools' });
-      panel.appendChild(tools);
+  /**
+   * 패널의 도구(이미지·정돈·필기)를 블록 바깥 위쪽 막대에 모아 둔다.
+   * 필드 위에 겹치지 않도록 블록 상단 여백에 띄우고, 마우스가 올라간 패널의 도구만 보여준다.
+   */
+  function attachPanelTools(
+    node: HTMLElement,
+    panel: HTMLElement,
+    b: Block,
+    key: string,
+    withImages: boolean,
+  ): void {
+    let host = $('.block-tools', node) as HTMLElement | null;
+    if (!host) {
+      host = el('div', { class: 'block-tools' });
+      node.appendChild(host);
     }
-    tools.appendChild(btn);
+
+    const group = el('div', { class: 'ptools' });
+    if (withImages) group.appendChild(images.imgTools(b));
+    group.appendChild(draw.attach(panel, b, key, group));
+    host.appendChild(group);
+
+    // 첫 패널 도구를 기본으로 보여 준다.
+    if (host.children.length === 1) group.classList.add('on');
+
+    const show = (): void => {
+      ($$('.ptools', host) as HTMLElement[]).forEach((g) => g.classList.toggle('on', g === group));
+    };
+    panel.addEventListener('pointerenter', show);
+    panel.addEventListener('focusin', show);
   }
 
   function syncFromDOM(): void {
@@ -484,20 +505,19 @@ export function createRenderer(ctx: RenderContext) {
 
     const probPanel = el('div', { class: 'panel imgpanel', style: 'flex:1' }, [
       panelLines(b.probBg),
-      images.imgTools(b),
       prob,
       layer,
     ]);
 
     images.attachPaste(prob, b);
     images.enableImageDrop(probPanel, b);
-    attachDrawTools(probPanel, b, 'prob');
+    attachPanelTools(node, probPanel, b, 'prob', true);
 
     const solPanel = el('div', { class: 'panel', style: 'flex:1' }, [
       panelLines(b.solBg),
       sol,
     ]);
-    attachDrawTools(solPanel, b, 'sol');
+    attachPanelTools(node, solPanel, b, 'sol', false);
 
     if (b.type === 'problem') {
       probPanel.style.flex = String(b.ratio);
@@ -575,24 +595,23 @@ export function createRenderer(ctx: RenderContext) {
     return el('div', { class: 'btitle-wrap' }, [titleInput, sizeCtrl]);
   }
 
-  function conceptImagePanel(b: ConceptBlock): { panel: HTMLElement; layer: HTMLElement } {
+  function conceptImagePanel(
+    node: HTMLElement,
+    b: ConceptBlock,
+  ): { panel: HTMLElement; layer: HTMLElement } {
     const fld = field('f-cimg', '', b.imgHtml);
     const layer = el('div', { class: 'img-layer' });
-    const panel = el('div', { class: 'panel imgpanel', style: 'flex:1' }, [
-      images.imgTools(b),
-      fld,
-      layer,
-    ]);
+    const panel = el('div', { class: 'panel imgpanel', style: 'flex:1' }, [fld, layer]);
     images.attachPaste(fld, b);
     images.enableImageDrop(panel, b);
-    attachDrawTools(panel, b, 'cimg');
+    attachPanelTools(node, panel, b, 'cimg', true);
     return { panel, layer };
   }
 
   function renderConceptBody(node: HTMLElement, b: ConceptBlock): void {
     const ex = field('f-ex', '', b.exHtml);
     const exPanel = el('div', { class: 'panel', style: 'flex:1' }, [panelLines(b.exBg, b.tint), ex]);
-    attachDrawTools(exPanel, b, 'ex');
+    attachPanelTools(node, exPanel, b, 'ex', false);
 
     if (b.imgMode === 'none') {
       node.appendChild(el('div', { class: 'bbody col' }, [exPanel]));
@@ -600,7 +619,7 @@ export function createRenderer(ctx: RenderContext) {
     }
 
     if (b.ratio == null) b.ratio = 0.5;
-    const { panel: imgPanel, layer } = conceptImagePanel(b);
+    const { panel: imgPanel, layer } = conceptImagePanel(node, b);
     imgPanel.style.flex = String(b.ratio);
     exPanel.style.flex = String(1 - b.ratio);
 
@@ -621,15 +640,11 @@ export function createRenderer(ctx: RenderContext) {
     const layer = el('div', { class: 'img-layer' });
     const drop = el('div', { class: 'imgonly-drop', tabindex: '0' });
 
-    const panel = el('div', { class: 'panel imgpanel imgonly', style: 'flex:1' }, [
-      images.imgTools(b),
-      drop,
-      layer,
-    ]);
+    const panel = el('div', { class: 'panel imgpanel imgonly', style: 'flex:1' }, [drop, layer]);
 
     images.attachPaste(drop, b);
     images.enableImageDrop(panel, b);
-    attachDrawTools(panel, b, 'main');
+    attachPanelTools(node, panel, b, 'main', true);
 
     if (b.titleHidden == null) b.titleHidden = true;
 

@@ -235,10 +235,25 @@ button { font-family: inherit; cursor: pointer; }
   box-shadow: var(--shadow-sheet);
   border-radius: 2px;
   position: relative;
-  padding: 46px 52px 28px;
   display: flex;
   flex-direction: column;
   flex: none;
+}
+
+/* 본문 상자 — 필기용 모드에서는 이 상자만 축소해 상하좌우 여백을 만든다 */
+.page-inner {
+  flex: 1;
+  min-height: 0;
+  box-sizing: border-box;
+  padding: 46px 52px 28px;
+  display: flex;
+  flex-direction: column;
+  transform-origin: center center;
+}
+
+.sheet-book.note-mode .page-inner {
+  transform: scale(var(--note-s, 1));
+  outline: 1px dashed var(--line);
 }
 
 .sheet-book.scroll-mode .sheet-page {
@@ -379,8 +394,9 @@ button { font-family: inherit; cursor: pointer; }
 }
 
 /* 제목행 숨김(컴팩트) 모드: 틀을 완전히 없애고, 컨트롤은 호버 시 우상단에 떠서 표시 */
+/* 크기조절 핸들(z-index 8)보다 위에 둬야 버튼이 눌린다 */
 .bhead.compact {
-  position: absolute; top: 2px; right: 2px; z-index: 8;
+  position: absolute; top: 2px; right: 2px; z-index: 13;
   padding: 0;
   justify-content: flex-end;
   background: transparent;
@@ -653,15 +669,21 @@ button { font-family: inherit; cursor: pointer; }
 .hdiv.adjustable.dragging { cursor: grabbing; }
 .hdiv.adjustable.dragging::before { background: var(--accent); box-shadow: 0 0 0 2px rgba(46,75,115,.25); }
 
-.field-tools {
-  position: absolute; bottom: 6px; right: 6px; z-index: 6;
-  display: flex; gap: 4px; opacity: 0; transition: opacity .12s;
-  pointer-events: none; flex-wrap: wrap; justify-content: flex-end;
+/* 도구 막대 — 필드를 가리지 않도록 블록 바깥 위쪽에 띄운다 */
+.block-tools {
+  position: absolute; bottom: 100%; right: 0; margin-bottom: 3px;
+  z-index: 14; display: flex; align-items: center; justify-content: flex-end;
+  opacity: 0; pointer-events: none; transition: opacity .12s;
 }
-.panel:hover .field-tools,
-.panel:focus-within .field-tools {
-  opacity: 1;
-  pointer-events: auto;
+.block:hover .block-tools,
+.block:focus-within .block-tools,
+.block-tools:hover { opacity: 1; pointer-events: auto; }
+
+.ptools { display: none; align-items: center; gap: 4px; }
+.ptools.on { display: flex; }
+
+.field-tools {
+  display: flex; gap: 4px; align-items: center; flex-wrap: wrap; justify-content: flex-end;
 }
 .minibtn {
   border: 1px solid var(--line); background: #fff; color: var(--ink-soft);
@@ -750,12 +772,13 @@ button { font-family: inherit; cursor: pointer; }
   touch-action: none;
 }
 .draw-layer svg { display: block; position: absolute; inset: 0; }
-.panel.drawing .draw-layer { pointer-events: auto; cursor: crosshair; }
-.panel.drawing .draw-layer.text-mode { cursor: text; }
-.panel.drawing .draw-layer.erase { cursor: pointer; }
+.drawing > .draw-layer { pointer-events: auto; cursor: crosshair; }
+.drawing > .draw-layer.text-mode { cursor: text; }
+.drawing > .draw-layer.erase { cursor: pointer; }
 .draw-layer svg path { pointer-events: none; }
-.panel.drawing .draw-layer.erase svg path { pointer-events: stroke; }
+.drawing > .draw-layer.erase svg path { pointer-events: stroke; }
 .panel.drawing { box-shadow: inset 0 0 0 2px var(--accent-soft); }
+.page-draw.drawing { box-shadow: inset 0 0 0 2px var(--accent-soft); }
 
 .dtext {
   position: absolute; z-index: 6;
@@ -763,23 +786,23 @@ button { font-family: inherit; cursor: pointer; }
   line-height: 1.35; white-space: pre-wrap; word-break: break-word;
   pointer-events: none;
 }
-.panel.drawing .dtext { pointer-events: auto; }
+.drawing .dtext { pointer-events: auto; }
 .dt-body {
   display: inline-block; outline: none; min-width: 10px;
   border-radius: 3px; padding: 0 2px;
 }
-.panel.drawing .dt-body { background: rgba(255,255,255,.55); box-shadow: 0 0 0 1px var(--line); }
-.panel.drawing .dt-body:focus { box-shadow: 0 0 0 1.5px var(--accent); background: #fff; }
+.drawing .dt-body { background: rgba(255,255,255,.55); box-shadow: 0 0 0 1px var(--line); }
+.drawing .dt-body:focus { box-shadow: 0 0 0 1.5px var(--accent); background: #fff; }
 .dt-drag {
   display: none; position: absolute; left: -16px; top: 1px;
   width: 14px; height: 14px; color: var(--ink-faint); cursor: grab;
   touch-action: none;
 }
 .dt-drag svg { width: 14px; height: 14px; }
-.panel.drawing .dt-drag { display: inline-block; }
+.drawing .dt-drag { display: inline-block; }
 
 .draw-tb {
-  position: absolute; top: 5px; right: 6px; z-index: 9;
+  z-index: 9;
   display: flex; align-items: center; gap: 2px;
   background: #fff; border: 1px solid var(--line); border-radius: 9px;
   padding: 3px; box-shadow: var(--shadow-card); white-space: nowrap;
@@ -802,6 +825,55 @@ button { font-family: inherit; cursor: pointer; }
 }
 .dsw.on { box-shadow: 0 0 0 2px var(--accent); }
 .minibtn.on { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+
+/* ── 필기용 모드: 페이지 여백 메모 ── */
+.page-draw {
+  position: absolute; inset: 0; z-index: 12;
+  pointer-events: none; border-radius: 2px;
+}
+.page-draw.drawing { pointer-events: auto; }
+.page-tools {
+  position: absolute; top: 8px; right: 10px; z-index: 13;
+  display: flex; align-items: center; gap: 4px;
+  opacity: 0; transition: opacity .12s;
+}
+.sheet-page:hover .page-tools,
+.page-tools:hover,
+.page-tools:focus-within { opacity: 1; }
+
+/* 안내 토스트 */
+.app-toast {
+  position: fixed; left: 50%; bottom: 84px; transform: translateX(-50%) translateY(8px);
+  z-index: 80; background: var(--ink); color: #fff;
+  font-size: 12.5px; font-weight: 600; padding: 9px 16px; border-radius: 999px;
+  box-shadow: var(--shadow-card); opacity: 0; pointer-events: none;
+  transition: opacity .16s, transform .16s; white-space: nowrap;
+}
+.app-toast.on { opacity: .95; transform: translateX(-50%) translateY(0); }
+
+/* ── 필기용 조정 바 ── */
+.notebar {
+  position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%);
+  z-index: 60; display: none; align-items: center; gap: 9px;
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: 999px; padding: 7px 14px; box-shadow: var(--shadow-card);
+  max-width: calc(100vw - 40px); flex-wrap: wrap; justify-content: center;
+}
+.app.note-on .notebar { display: flex; }
+.note-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: var(--accent); color: #fff; font-size: 11.5px; font-weight: 700;
+  padding: 4px 10px; border-radius: 999px; white-space: nowrap;
+}
+.note-badge svg { width: 13px; height: 13px; }
+.note-lab { font-size: 12px; font-weight: 700; color: var(--ink-soft); white-space: nowrap; }
+.note-range { width: 130px; accent-color: var(--accent); }
+.note-val {
+  font-size: 12px; font-weight: 700; color: var(--ink);
+  font-variant-numeric: tabular-nums; white-space: nowrap; min-width: 132px;
+}
+.note-hint { font-size: 11.5px; color: var(--ink-faint); white-space: nowrap; }
+.note-sep { width: 1px; height: 18px; background: var(--line); }
 
 .resize-h {
   height: 14px; cursor: grab; position: relative; flex: none;
@@ -833,6 +905,10 @@ button { font-family: inherit; cursor: pointer; }
   width: 64px;
   height: 5px;
 }
+
+/* 상단 핸들의 잡는 영역이 우측 버튼 묶음을 덮지 않도록 비켜 준다 */
+.block.image-only .resize-h-top { padding-right: 150px; box-sizing: border-box; }
+.block.image-only .resize-h-top::before { inset: -2px 150px -8px 0; }
 .block.image-only .resize-h-top {
   border-top: none;
   border-bottom: 1px dashed var(--line);
@@ -956,6 +1032,9 @@ button { font-family: inherit; cursor: pointer; }
   .vdiv,
   .hdiv,
   .field-tools,
+  .block-tools,
+  .page-tools,
+  .notebar,
   .size-badge,
   .ihandle,
   .img-tb,
@@ -964,6 +1043,10 @@ button { font-family: inherit; cursor: pointer; }
   .crop-box,
   .bhead.compact,
   .galign { display: none !important; }
+
+  /* 필기용 모드: 여백은 그대로 인쇄하고 안내선만 감춘다 */
+  .sheet-book.note-mode .page-inner { outline: none !important; }
+  .page-draw { box-shadow: none !important; }
 
   /* 필기 텍스트는 인쇄에 그대로 표시 (편집용 배경만 제거) */
   .dt-body { background: transparent !important; box-shadow: none !important; }

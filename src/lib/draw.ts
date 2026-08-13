@@ -1,5 +1,5 @@
 import type { Store } from '../state/store';
-import type { Block, DrawSet, DrawStroke, DrawText } from '../types';
+import type { DrawHolder, DrawSet, DrawStroke, DrawText } from '../types';
 import { el } from '../utils/dom';
 import { Icons } from '../utils/icons';
 
@@ -21,16 +21,22 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
 export function createDrawService(ctx: DrawContext) {
   const { store } = ctx;
 
-  function setOf(block: Block, key: string): DrawSet {
-    block.draws = block.draws ?? {};
-    block.draws[key] = block.draws[key] ?? { strokes: [], texts: [] };
-    return block.draws[key];
+  function setOf(holder: DrawHolder, key: string): DrawSet {
+    holder.draws = holder.draws ?? {};
+    holder.draws[key] = holder.draws[key] ?? { strokes: [], texts: [] };
+    return holder.draws[key];
   }
 
   /**
-   * 패널에 필기 레이어를 붙이고, 필기 모드를 여닫는 연필 버튼을 돌려준다.
+   * 패널(또는 페이지 여백)에 필기 레이어를 붙이고, 필기 모드를 여닫는 연필 버튼을 돌려준다.
+   * tbHost를 주면 필기 도구 막대가 그곳에 붙어 본문을 가리지 않는다.
    */
-  function attach(panel: HTMLElement, block: Block, key: string): HTMLButtonElement {
+  function attach(
+    panel: HTMLElement,
+    block: DrawHolder,
+    key: string,
+    tbHost?: HTMLElement,
+  ): HTMLButtonElement {
     const layer = el('div', { class: 'draw-layer' });
     const svg = document.createElementNS(SVG_NS, 'svg');
     layer.appendChild(svg);
@@ -285,7 +291,7 @@ export function createDrawService(ctx: DrawContext) {
       tool = 'pen';
       panel.classList.add('drawing');
       tb = buildTb();
-      panel.appendChild(tb);
+      (tbHost ?? panel).appendChild(tb);
       layer.classList.remove('erase', 'text-mode');
       btn.classList.add('on');
     }

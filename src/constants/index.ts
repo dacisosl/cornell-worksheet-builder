@@ -28,6 +28,22 @@ export const ZOOM_STEP = 0.1;
 export const SAVE_DEBOUNCE_MS = 400;
 export const PAGINATE_DEBOUNCE_MS = 60;
 
+/** A4 실치수(mm) — 필기용 여백 계산 기준 */
+export const A4_W_MM = 210;
+export const A4_H_MM = 297;
+
+/** 필기용 모드: 좌우 여백(mm) */
+export const NOTE_MARGIN_DEFAULT = 15;
+export const NOTE_MARGIN_MIN = 0;
+export const NOTE_MARGIN_MAX = 35;
+export const NOTE_MARGIN_STEP = 1;
+
+/** 좌우 여백(mm)에서 본문 축소 비율을 구한다. */
+export function noteScaleOf(marginMm: number): number {
+  const m = Math.min(NOTE_MARGIN_MAX, Math.max(NOTE_MARGIN_MIN, marginMm));
+  return 1 - (2 * m) / A4_W_MM;
+}
+
 export const TITLE_SIZE_DEFAULT = 15.5;
 export const TITLE_SIZE_MIN = 10;
 export const TITLE_SIZE_MAX = 28;

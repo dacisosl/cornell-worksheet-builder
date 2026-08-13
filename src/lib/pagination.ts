@@ -12,7 +12,11 @@ export interface PageBook {
   onContTitleChange: () => void;
 }
 
-export function createPagination(store: Store, onLayout?: () => void): PageBook {
+export function createPagination(
+  store: Store,
+  onLayout?: () => void,
+  onPageReady?: (page: HTMLElement, num: number) => void,
+): PageBook {
   let paginating = false;
   function bookEl(): HTMLElement | null {
     return $('#sheetBook');
@@ -50,10 +54,13 @@ export function createPagination(store: Store, onLayout?: () => void): PageBook 
     const book = bookEl()!;
     const page = el('div', { class: 'sheet-page', data: { page: String(num) } });
 
+    // 본문은 page-inner에 담는다 — 필기용 모드에서 이 상자만 축소해 여백을 만든다.
+    const inner = el('div', { class: 'page-inner' });
+
     if (isFirst) {
-      page.appendChild(el('div', { class: 'sheet-head', id: 'sheetHead' }));
+      inner.appendChild(el('div', { class: 'sheet-head', id: 'sheetHead' }));
     } else {
-      page.appendChild(buildContHead());
+      inner.appendChild(buildContHead());
     }
 
     const stack = el('div', {
@@ -61,8 +68,9 @@ export function createPagination(store: Store, onLayout?: () => void): PageBook 
       ...(isFirst ? { id: 'stack' } : {}),
       data: { pageStack: String(num) },
     });
-    page.appendChild(stack);
-    page.appendChild(el('div', { class: 'page-foot' }, el('span', { class: 'page-num' })));
+    inner.appendChild(stack);
+    inner.appendChild(el('div', { class: 'page-foot' }, el('span', { class: 'page-num' })));
+    page.appendChild(inner);
     book.appendChild(page);
     return page;
   }
@@ -249,7 +257,11 @@ export function createPagination(store: Store, onLayout?: () => void): PageBook 
 
   function updateBookMode(): void {
     const book = bookEl();
-    if (book) book.classList.toggle('scroll-mode', !store.state.meta.pageFit);
+    if (!book) return;
+    book.classList.toggle('scroll-mode', !store.state.meta.pageFit);
+    const note = store.state.meta.note;
+    book.classList.toggle('note-mode', note.on);
+    book.style.setProperty('--note-s', String(store.noteScale()));
   }
 
   function paginate(): void {
@@ -274,6 +286,7 @@ export function createPagination(store: Store, onLayout?: () => void): PageBook 
       paginateMultiPage(blocks);
     } finally {
       paginating = false;
+      if (onPageReady) getPages().forEach((p, i) => onPageReady(p, i + 1));
     }
   }
 

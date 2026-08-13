@@ -1,4 +1,12 @@
-import { LEGACY_KEYS, SAVE_DEBOUNCE_MS, STORE_KEY } from '../constants';
+import {
+  LEGACY_KEYS,
+  NOTE_MARGIN_DEFAULT,
+  NOTE_MARGIN_MAX,
+  NOTE_MARGIN_MIN,
+  SAVE_DEBOUNCE_MS,
+  STORE_KEY,
+  noteScaleOf,
+} from '../constants';
 import type { AppMeta, AppState, Block, BlockType, ImageSelection } from '../types';
 import { debounce } from '../utils/dom';
 
@@ -11,16 +19,32 @@ function cloneState<T>(v: T): T {
 }
 
 function defaultMeta(): AppMeta {
-  return { title: '', contTitle: '', showHead: true, grid: true, pageFit: true };
+  return {
+    title: '',
+    contTitle: '',
+    showHead: true,
+    grid: true,
+    pageFit: true,
+    note: { on: false, margin: NOTE_MARGIN_DEFAULT },
+  };
 }
 
 function normalizeMeta(meta: Partial<AppMeta> | undefined): AppMeta {
+  const margin = meta?.note?.margin;
   return {
     title: meta?.title ?? '',
     contTitle: meta?.contTitle ?? '',
     showHead: meta?.showHead ?? true,
     grid: meta?.grid ?? true,
     pageFit: meta?.pageFit ?? true,
+    note: {
+      on: meta?.note?.on ?? false,
+      margin:
+        typeof margin === 'number'
+          ? Math.min(NOTE_MARGIN_MAX, Math.max(NOTE_MARGIN_MIN, margin))
+          : NOTE_MARGIN_DEFAULT,
+    },
+    draws: meta?.draws,
   };
 }
 
@@ -198,8 +222,12 @@ export class Store {
   }
 
   reset(): void {
-    const { grid, pageFit } = this.state.meta;
-    this.state = { meta: { title: '', contTitle: '', showHead: true, grid, pageFit }, blocks: [], zoom: this.state.zoom };
+    const { grid, pageFit, note } = this.state.meta;
+    this.state = {
+      meta: { title: '', contTitle: '', showHead: true, grid, pageFit, note: { ...note, on: false } },
+      blocks: [],
+      zoom: this.state.zoom,
+    };
     this.seq = 1;
     this.imgSeq = 1;
     this.selected = null;
@@ -244,6 +272,17 @@ export class Store {
 
   getZoom(): number {
     return this.state.zoom ?? 1;
+  }
+
+  /** 필기용 모드에서 본문에 적용되는 축소 비율 (모드가 꺼져 있으면 1) */
+  noteScale(): number {
+    const note = this.state.meta.note;
+    return note.on ? noteScaleOf(note.margin) : 1;
+  }
+
+  /** 화면 좌표 → 레이아웃 좌표 변환에 쓰는 실제 배율 (줌 × 필기용 축소) */
+  getEffectiveScale(): number {
+    return this.getZoom() * this.noteScale();
   }
 
   setZoom(z: number): void {

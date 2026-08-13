@@ -1,4 +1,14 @@
-import { PAGINATE_DEBOUNCE_MS, ZOOM_MAX, ZOOM_MIN, ZOOM_STEP } from './constants';
+import {
+  NOTE_MARGIN_MAX,
+  NOTE_MARGIN_MIN,
+  NOTE_MARGIN_STEP,
+  PAGINATE_DEBOUNCE_MS,
+  ZOOM_MAX,
+  ZOOM_MIN,
+  ZOOM_STEP,
+  A4_H_MM,
+  A4_W_MM,
+} from './constants';
 import { makeBlock } from './lib/blocks';
 import { hasImages } from './lib/blocks';
 import { createDrawService } from './lib/draw';
@@ -16,6 +26,7 @@ export function createApp(root: HTMLElement) {
 
   let renderer!: ReturnType<typeof createRenderer>;
   let images!: ReturnType<typeof createImageService>;
+  let draw!: ReturnType<typeof createDrawService>;
 
   function applyZoom(): void {
     const book = document.getElementById('sheetBook');
@@ -29,18 +40,40 @@ export function createApp(root: HTMLElement) {
     zlabel.textContent = Math.round(z * 100) + '%';
   }
 
-  const pagination = createPagination(store, () => {
-    store.state.blocks.forEach((b) => {
-      if (hasImages(b)) images.reLayer(b);
-    });
-    applyZoom();
-  });
+  /** 필기용 모드에서 페이지 여백에 메모를 쓸 수 있는 필기 레이어를 붙인다. */
+  function setupPageNote(page: HTMLElement, num: number): void {
+    const on = store.state.meta.note.on;
+    const existing = page.querySelector('.page-draw');
+    if (!on) {
+      existing?.remove();
+      page.querySelector('.page-tools')?.remove();
+      return;
+    }
+    if (existing) return;
+
+    const holder = el('div', { class: 'page-draw' });
+    page.appendChild(holder);
+    const tools = el('div', { class: 'page-tools' });
+    page.appendChild(tools);
+    tools.appendChild(draw.attach(holder, store.state.meta, `p${num}`, tools));
+  }
+
+  const pagination = createPagination(
+    store,
+    () => {
+      store.state.blocks.forEach((b) => {
+        if (hasImages(b)) images.reLayer(b);
+      });
+      applyZoom();
+    },
+    setupPageNote,
+  );
 
   const paginateSoon = debounce(() => pagination.paginate(), PAGINATE_DEBOUNCE_MS);
 
   const render = () => renderer.render();
   images = createImageService({ store, render });
-  const draw = createDrawService({ store });
+  draw = createDrawService({ store });
 
   const interactions = createInteractions({
     store,
@@ -63,6 +96,7 @@ export function createApp(root: HTMLElement) {
     renderer.renderHead();
     render();
     applyZoom();
+    refreshNoteBar();
   }
 
   function safeTitle(): string {
@@ -76,14 +110,108 @@ export function createApp(root: HTMLElement) {
     return `${d.getFullYear()}-${mm}-${dd}`;
   }
 
-  function exportWorksheet(): void {
+  function downloadJSON(name: string): void {
     const blob = new Blob([store.exportJSON()], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${safeTitle()}_${dateStamp()}.cornell.json`;
+    a.download = name;
     a.click();
     URL.revokeObjectURL(url);
+  }
+
+  function exportWorksheet(): void {
+    downloadJSON(`${safeTitle()}_${dateStamp()}.cornell.json`);
+  }
+
+  /** 필기용 파일로 저장 — 저장 후 바로 필기용 편집 화면으로 넘어간다. */
+  function exportNote(): void {
+    renderer.syncFromDOM();
+    if (!store.state.meta.note.on) setNoteMode(true);
+    store.save();
+    downloadJSON(`${safeTitle()}_필기용_${dateStamp()}.cornell.json`);
+  }
+
+  function setNoteMode(on: boolean): void {
+    renderer.syncFromDOM();
+    store.state.meta.note.on = on;
+    store.commit();
+    root.classList.toggle('note-on', on);
+    pagination.paginate();
+    applyZoom();
+    refreshNoteBar();
+  }
+
+  function setNoteMargin(mm: number): void {
+    const m = Math.min(NOTE_MARGIN_MAX, Math.max(NOTE_MARGIN_MIN, Math.round(mm)));
+    store.state.meta.note.margin = m;
+    store.commit();
+    pagination.paginate();
+    applyZoom();
+    refreshNoteBar();
+  }
+
+  let noteRange!: HTMLInputElement;
+  let noteVal!: HTMLElement;
+
+  function refreshNoteBar(): void {
+    const { on, margin } = store.state.meta.note;
+    root.classList.toggle('note-on', on);
+    if (!noteRange) return;
+    noteRange.value = String(margin);
+    const v = (margin * A4_H_MM) / A4_W_MM;
+    noteVal.textContent = `좌우 ${margin}mm · 상하 ${Math.round(v)}mm`;
+  }
+
+  function buildNoteBar(): HTMLElement {
+    noteRange = el('input', {
+      type: 'range',
+      class: 'note-range',
+      min: String(NOTE_MARGIN_MIN),
+      max: String(NOTE_MARGIN_MAX),
+      step: String(NOTE_MARGIN_STEP),
+      oninput: (e: Event) => setNoteMargin(+(e.target as HTMLInputElement).value),
+    }) as HTMLInputElement;
+    noteVal = el('span', { class: 'note-val' });
+
+    return el('div', { class: 'notebar', id: 'notebar' }, [
+      el('span', { class: 'note-badge', html: Icons.pencil + '<span>필기용</span>' }),
+      el('span', { class: 'note-lab', text: '여백' }),
+      el('button', {
+        class: 'zbtn',
+        text: '−',
+        title: '여백 줄이기',
+        onclick: () => setNoteMargin(store.state.meta.note.margin - NOTE_MARGIN_STEP),
+      }),
+      noteRange,
+      el('button', {
+        class: 'zbtn',
+        text: '+',
+        title: '여백 늘리기',
+        onclick: () => setNoteMargin(store.state.meta.note.margin + NOTE_MARGIN_STEP),
+      }),
+      noteVal,
+      el('span', { class: 'note-sep' }),
+      el('span', { class: 'note-hint', text: '여백의 연필 버튼으로 메모를 씁니다' }),
+      el('span', { class: 'note-sep' }),
+      el('button', {
+        class: 'tbtn ghost',
+        html: Icons.download + '<span>필기용 저장</span>',
+        title: '필기용 JSON 파일로 저장',
+        onclick: exportNote,
+      }),
+      el('button', {
+        class: 'tbtn primary',
+        html: Icons.print + '<span>인쇄 / PDF</span>',
+        onclick: () => window.print(),
+      }),
+      el('button', {
+        class: 'tbtn ghost',
+        text: '원본으로',
+        title: '원본 편집으로 돌아가기',
+        onclick: () => setNoteMode(false),
+      }),
+    ]);
   }
 
   function importWorksheet(): void {
@@ -109,6 +237,7 @@ export function createApp(root: HTMLElement) {
         renderer.renderHead();
         render();
         applyZoom();
+        refreshNoteBar();
       };
       reader.readAsText(file);
     };
@@ -144,6 +273,12 @@ export function createApp(root: HTMLElement) {
           title: '현재 학습지를 JSON 파일로 저장',
           html: Icons.download + '<span>저장</span>',
           onclick: exportWorksheet,
+        }),
+        el('button', {
+          class: 'tbtn ghost',
+          title: '본문을 줄여 여백을 만든 필기용 파일로 저장하고 편집합니다',
+          html: Icons.pencil + '<span>필기용</span>',
+          onclick: exportNote,
         }),
         el('button', { class: 'tbtn ghost', text: '전체 비우기', onclick: resetAll }),
         el('button', {
@@ -234,6 +369,9 @@ export function createApp(root: HTMLElement) {
     root.appendChild(
       el('main', { class: 'canvas', id: 'canvas' }, el('div', { class: 'sheet-wrap', id: 'sheetWrap' })),
     );
+
+    root.appendChild(buildNoteBar());
+    refreshNoteBar();
   }
 
   function paletteCard(
