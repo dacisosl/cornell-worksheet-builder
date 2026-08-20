@@ -29,6 +29,33 @@ const DEFAULT_MODELS: Record<Provider, string> = {
   gemini: 'gemini-2.5-flash',
 };
 
+export interface CuratedModel {
+  id: string;
+  label: string;
+  note: string;
+}
+
+/**
+ * 바로 고를 수 있는 추천 모델.
+ * 목록은 참고용 — '전체 모델 불러오기'로 제공자의 실시간 목록을 받아 고를 수도 있다.
+ */
+export const CURATED_MODELS: Record<Provider, CuratedModel[]> = {
+  openrouter: [
+    { id: 'google/gemini-2.5-flash', label: 'Gemini 2.5 Flash', note: '빠르고 저렴 — 기본값' },
+    { id: 'google/gemini-2.5-pro', label: 'Gemini 2.5 Pro', note: '구글 고성능' },
+    { id: 'google/gemini-3-pro-preview', label: 'Gemini 3 Pro', note: '구글 최신 고성능' },
+    { id: 'openai/gpt-4o', label: 'GPT-4o', note: '오픈AI 범용' },
+    { id: 'openai/gpt-5.1', label: 'GPT-5.1', note: '오픈AI 고성능' },
+    { id: 'anthropic/claude-sonnet-4.5', label: 'Claude Sonnet 4.5', note: '앤트로픽 균형형' },
+    { id: 'anthropic/claude-opus-4.5', label: 'Claude Opus 4.5', note: '앤트로픽 고성능 — 비쌈' },
+  ],
+  gemini: [
+    { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', note: '빠르고 저렴 — 기본값' },
+    { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro', note: '고성능' },
+    { id: 'gemini-3-pro-preview', label: 'Gemini 3 Pro', note: '최신 고성능' },
+  ],
+};
+
 export function defaultSettings(): AiSettings {
   return {
     provider: 'openrouter',

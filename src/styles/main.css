@@ -1228,6 +1228,8 @@ button { font-family: inherit; cursor: pointer; }
 .gp-prompt { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
 .gp-inline { display: flex; gap: 6px; align-items: center; }
 .gp-inline .gp-input { flex: 1; min-width: 0; }
+.gp-model { display: flex; flex-direction: column; gap: 6px; }
+.gp-select { appearance: auto; cursor: pointer; }
 
 .gp-seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: #fff; }
 .gp-seg button {

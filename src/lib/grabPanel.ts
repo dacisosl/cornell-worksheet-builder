@@ -4,6 +4,7 @@
  */
 
 import {
+  CURATED_MODELS,
   PROVIDER_KEY_URL,
   PROVIDER_LABEL,
   activeKey,
@@ -21,7 +22,9 @@ import {
   buildDigest,
   buildUserPrompt,
   finalPrompt,
+  normalizeCourse,
   normalizePlan,
+  schoolOf,
   type GrabPlan,
 } from './grabBridge';
 import { AUTHOR_SYSTEM, applyAuthored, buildAuthorPrompt } from './grabAuthor';
@@ -98,10 +101,15 @@ export function createGrabPanel(ctx: GrabPanelContext) {
   }
 
   function buildSettings(): HTMLElement {
+    const CUSTOM = '__custom__';
+
+    // 추천 모델은 셀렉트로 바로 고르고, '직접 입력'을 고르면 자유 입력이 열린다.
+    const modelSelect = el('select', { class: 'gp-input gp-select' }) as HTMLSelectElement;
     const modelInput = el('input', {
       class: 'gp-input',
       value: settings.models[settings.provider],
-      placeholder: '모델 이름',
+      placeholder: '모델 이름 직접 입력',
+      style: 'display:none',
       oninput: (e: Event) => {
         settings.models[settings.provider] = (e.target as HTMLInputElement).value;
         saveSettings(settings);
@@ -110,6 +118,34 @@ export function createGrabPanel(ctx: GrabPanelContext) {
 
     const modelList = el('datalist', { id: 'gpModels' }) as HTMLDataListElement;
     modelInput.setAttribute('list', 'gpModels');
+
+    function fillModelSelect(): void {
+      const cur = settings.models[settings.provider];
+      const curated = CURATED_MODELS[settings.provider];
+      modelSelect.innerHTML = '';
+      curated.forEach((m) => {
+        modelSelect.appendChild(
+          el('option', { value: m.id, text: `${m.label} — ${m.note}` }),
+        );
+      });
+      modelSelect.appendChild(el('option', { value: CUSTOM, text: '직접 입력…' }));
+      const inList = curated.some((m) => m.id === cur);
+      modelSelect.value = inList ? cur : CUSTOM;
+      modelInput.style.display = inList ? 'none' : '';
+      modelInput.value = cur;
+    }
+
+    modelSelect.addEventListener('change', () => {
+      if (modelSelect.value === CUSTOM) {
+        modelInput.style.display = '';
+        modelInput.focus();
+        return;
+      }
+      modelInput.style.display = 'none';
+      settings.models[settings.provider] = modelSelect.value;
+      saveSettings(settings);
+    });
+    fillModelSelect();
 
     const keyInput = el('input', {
       class: 'gp-input',
@@ -128,7 +164,7 @@ export function createGrabPanel(ctx: GrabPanelContext) {
       settings.provider = p;
       saveSettings(settings);
       keyInput.value = settings.keys[p];
-      modelInput.value = settings.models[p];
+      fillModelSelect();
       modelList.innerHTML = '';
       [...seg.children].forEach((c) => c.classList.toggle('on', c.getAttribute('data-p') === p));
       keyHint.innerHTML = `키 발급: <a href="${PROVIDER_KEY_URL[p]}" target="_blank" rel="noreferrer">${PROVIDER_KEY_URL[p]}</a>`;
@@ -152,7 +188,7 @@ export function createGrabPanel(ctx: GrabPanelContext) {
 
     const loadBtn = el('button', {
       class: 'gp-btn ghost',
-      text: '모델 불러오기',
+      text: '전체 모델 불러오기',
       onclick: async () => {
         loadBtn.disabled = true;
         const old = loadBtn.textContent;
@@ -162,6 +198,10 @@ export function createGrabPanel(ctx: GrabPanelContext) {
           modelList.innerHTML = '';
           ids.forEach((id) => modelList.appendChild(el('option', { value: id })));
           loadBtn.textContent = `${ids.length}개`;
+          // 전체 목록은 직접 입력 칸의 자동완성으로 제공한다.
+          modelSelect.value = CUSTOM;
+          modelInput.style.display = '';
+          modelInput.focus();
         } catch (err) {
           setStatus(`모델 목록 실패: ${(err as Error).message}`, true);
           loadBtn.textContent = old;
@@ -176,7 +216,15 @@ export function createGrabPanel(ctx: GrabPanelContext) {
       field('AI 제공자', seg, '둘 다 지원합니다. 쓰실 쪽을 고르고 키를 넣으세요.'),
       el('div', { class: 'gp-row' }, [
         field('API 키', keyInput),
-        field('모델', el('div', { class: 'gp-inline' }, [modelInput, modelList, loadBtn])),
+        field(
+          '모델',
+          el('div', { class: 'gp-model' }, [
+            el('div', { class: 'gp-inline' }, [modelSelect, loadBtn]),
+            modelInput,
+            modelList,
+          ]),
+          '본문 저작 품질이 아쉬우면 Claude·GPT·Gemini Pro 같은 상위 모델을 고르세요.',
+        ),
       ]),
       keyHint,
       el('p', {
@@ -392,6 +440,87 @@ export function createGrabPanel(ctx: GrabPanelContext) {
     ]);
   }
 
+  type GrabEngine = typeof import('./grabRuntime');
+
+  /**
+   * 엔진 조립을 실패 없이 통과시키는 호출 체인.
+   * 교사가 세부 정보를 채우지 않아도, 분석 결과와 성취기준 CSV로 알아서 해결한다.
+   *
+   *  1차: AI가 정한 세부 과목(고교 수학이면 course)으로 그대로 조립
+   *  2차: 세부 과목이 없거나 거부되면 — CSV에서 키워드로 성취기준을 직접 찾아 코드로 조립
+   *  3차: 코드도 못 찾으면 — 학년에 맞는 기본 과목으로 조립 (고1→공통수학1, 그 외→대수)
+   *  덤 : 아키타입이 그 교과에 안 맞으면 엔진 추천으로 되돌린다
+   */
+  async function composeResilient(engine: GrabEngine, plan: GrabPlan): Promise<ComposeResult> {
+    const grade = plan.gradeBand || (plan.course ? '고1' : '중2');
+    const school = schoolOf(grade);
+    const baseSubject = plan.subjectLabel || '과학';
+    const course = normalizeCourse(plan.course);
+    const topic = plan.topic || store.state.meta.title || '활동';
+    const isHighMath = school === '고등학교' && plan.subject === 'math';
+
+    const attempt = (subject: string, codes: string[] | null, archetype: string | null) =>
+      engine.compose({
+        grade,
+        subject,
+        topic,
+        archetype,
+        codes,
+        objectives: plan.objectives,
+      });
+
+    /** 아키타입 불일치는 어느 단계에서든 엔진 추천으로 한 번 되돌린다. */
+    const withArchetypeFallback = async (
+      subject: string,
+      codes: string[] | null,
+    ): Promise<ComposeResult> => {
+      try {
+        return await attempt(subject, codes, plan.archetype || null);
+      } catch (err) {
+        if (!(err as Error).message.includes('아키타입')) throw err;
+        return attempt(subject, codes, null);
+      }
+    };
+
+    // 1차 — AI가 정한 과목 그대로
+    try {
+      return await withArchetypeFallback(course || baseSubject, null);
+    } catch (err1) {
+      // 2차 — 성취기준을 CSV에서 직접 찾아 코드로 지정 (코드가 있으면 세부 과목 요구가 풀린다)
+      const codes: string[] = [];
+      const seen = new Set<string>();
+      for (const kw of [...plan.standardsKeywords, topic]) {
+        if (codes.length >= 6) break;
+        const rows = await engine.searchStandards({
+          school: school || undefined,
+          subject: baseSubject,
+          keyword: kw,
+          limit: 6 - codes.length,
+        });
+        rows.forEach((r) => {
+          if (!seen.has(r.code)) {
+            seen.add(r.code);
+            codes.push(r.code);
+          }
+        });
+      }
+      if (codes.length) {
+        try {
+          return await withArchetypeFallback(baseSubject, codes);
+        } catch {
+          /* 3차로 넘어간다 */
+        }
+      }
+
+      // 3차 — 학년 기본 과목 (고교 수학에서만 의미가 있다)
+      if (isHighMath) {
+        const fallback = /고\s*1/.test(grade) ? '공통수학1' : '대수';
+        return withArchetypeFallback(fallback, null);
+      }
+      throw err1;
+    }
+  }
+
   /** 분석 → 구조 조립 → 본문 저작 → 검수 → 2벌. 전 과정을 빌더 안에서 끝낸다. */
   async function runFull(): Promise<void> {
     if (busy) return;
@@ -412,13 +541,7 @@ export function createGrabPanel(ctx: GrabPanelContext) {
       // 엔진·블록 라이브러리·성취기준은 이 기능을 쓸 때만 내려받는다(첫 화면을 가볍게).
       setStatus('2/4 활동 구조를 짜고 성취기준을 찾는 중…');
       const engine = await import('./grabRuntime');
-      const composed: ComposeResult = await engine.compose({
-        grade: analyzed.gradeBand || '중2',
-        subject: analyzed.subjectLabel || '과학',
-        topic: analyzed.topic || store.state.meta.title || '활동',
-        archetype: analyzed.archetype || null,
-        objectives: analyzed.objectives,
-      });
+      const composed: ComposeResult = await composeResilient(engine, analyzed);
 
       // 3) 본문 저작
       setStatus('3/4 초안 내용을 살려 본문을 채우는 중…');

@@ -38,10 +38,53 @@ export const GRAB_ARCHETYPES: { id: string; name: string; subjects: string[]; de
   { id: 'concept-example-practice', name: '개념·예제·연습', subjects: ['math'], desc: '핵심 개념 → 예제 풀이 따라가기 → 쌍둥이 문제 → 연습 → 좌표평면 그래프' },
 ];
 
+/** 고등학교 수학 세부 과목 — worksheet-grab 엔진이 받는 이름들 */
+export const HIGH_MATH_COURSES = [
+  '공통수학1',
+  '공통수학2',
+  '대수',
+  '미적분Ⅰ',
+  '미적분Ⅱ',
+  '확률과 통계',
+  '기하',
+  '경제 수학',
+] as const;
+
+/** 흔한 표기 변형을 엔진이 아는 이름으로 맞춘다. 모르는 이름이면 빈 문자열 */
+export function normalizeCourse(raw: string): string {
+  const s = raw.trim().replace(/\s+/g, '');
+  if (!s) return '';
+  const map: Record<string, string> = {
+    공통수학1: '공통수학1',
+    공통수학2: '공통수학2',
+    대수: '대수',
+    미적분1: '미적분Ⅰ',
+    ' 미적분I': '미적분Ⅰ',
+    미적분I: '미적분Ⅰ',
+    미적분Ⅰ: '미적분Ⅰ',
+    미적분2: '미적분Ⅱ',
+    미적분II: '미적분Ⅱ',
+    미적분Ⅱ: '미적분Ⅱ',
+    확률과통계: '확률과 통계',
+    확통: '확률과 통계',
+    기하: '기하',
+    경제수학: '경제 수학',
+  };
+  return map[s] ?? '';
+}
+
+/** gradeBand("고1", "고등학교 2학년")에서 학교급을 뽑는다 */
+export function schoolOf(gradeBand: string): '초등학교' | '중학교' | '고등학교' | '' {
+  const c = gradeBand.trim()[0];
+  return c === '초' ? '초등학교' : c === '중' ? '중학교' : c === '고' ? '고등학교' : '';
+}
+
 /** AI가 돌려줄 분석 결과 */
 export interface GrabPlan {
   subject: string;
   subjectLabel: string;
+  /** 고등학교의 세부 과목명 (공통수학1, 미적분Ⅰ, 물리학 등). 중·초등이면 빈 문자열 */
+  course: string;
   gradeBand: string;
   topic: string;
   archetype: string;
@@ -129,7 +172,12 @@ worksheet-grab에 대해 알아야 할 것:
 - 성취기준은 worksheet-grab이 자체 CSV에서 **조회**합니다. 따라서 성취기준 코드를 절대 지어내지 마세요.
   대신 조회에 쓸 주제 키워드만 주세요.
 - 교과 코드: korean(국어) · english(영어) · math(수학) · science(과학) · social(사회)
-- 활동 구조(아키타입)는 아래 목록 중에서만 고릅니다.
+- **고등학교 수학은 세부 과목이 필수입니다.** gradeBand가 고등학교(고1~고3)이고 수학이면
+  course에 반드시 다음 중 하나를 넣으세요: 공통수학1, 공통수학2, 대수, 미적분Ⅰ, 미적분Ⅱ,
+  확률과 통계, 기하, 경제 수학. (고1이면 보통 공통수학1·2, 고2부터 대수·미적분Ⅰ 등)
+  중학교·초등학교이거나 수학이 아니면 course는 빈 문자열로 둡니다.
+- 활동 구조(아키타입)는 아래 목록 중에서만 고릅니다. subjects에 그 교과가 없는 구조를 고르면 안 됩니다.
+  (예: concept-example-practice 는 math 전용, experimental-inquiry 는 science·social 전용)
 - 주요 명령:
   · node bin/worksheet-grab.js pipeline <학년교과> <주제> --out out/       (표준 주제 한 번에)
   · node bin/worksheet-grab.js compose <학년교과> <주제> --archetype <id> --out out/   (맞춤 구조)
@@ -147,7 +195,8 @@ worksheet-grab에 대해 알아야 할 것:
 {
   "subject": "교과 코드",
   "subjectLabel": "교과 한글 이름",
-  "gradeBand": "예: 중2 (초안에서 알 수 없으면 빈 문자열)",
+  "course": "고등학교 수학일 때만 세부 과목명, 아니면 빈 문자열",
+  "gradeBand": "예: 중2, 고1 (초안에서 알 수 없으면 빈 문자열)",
   "topic": "핵심 주제 (짧은 명사구)",
   "archetype": "아키타입 id",
   "archetypeReason": "그 구조를 고른 이유 한 문장",
@@ -192,6 +241,7 @@ export function normalizePlan(raw: unknown): GrabPlan {
   return {
     subject,
     subjectLabel: String(o.subjectLabel ?? GRAB_SUBJECTS[subject] ?? '').trim(),
+    course: String(o.course ?? '').trim(),
     gradeBand: String(o.gradeBand ?? '').trim(),
     topic: String(o.topic ?? '').trim(),
     archetype: String(o.archetype ?? '').trim(),
