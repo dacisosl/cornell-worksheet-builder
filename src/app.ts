@@ -157,8 +157,14 @@ export function createApp(root: HTMLElement) {
     const a = document.createElement('a');
     a.href = url;
     a.download = name;
+    // 문서에 붙여야 download 속성(파일명)이 지켜지고, 저장이 끝난 뒤에 URL을 정리한다.
+    a.style.display = 'none';
+    document.body.appendChild(a);
     a.click();
-    URL.revokeObjectURL(url);
+    setTimeout(() => {
+      a.remove();
+      URL.revokeObjectURL(url);
+    }, 0);
   }
 
   function exportWorksheet(): void {

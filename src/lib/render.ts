@@ -4,7 +4,7 @@ import type { ImageService } from './images';
 import type { Interactions } from './interactions';
 import type { PageBook } from './pagination';
 import type { Store } from '../state/store';
-import type { BgMode, Block, ConceptBlock, MockBlock, ProblemBlock } from '../types';
+import type { BgMode, Block, ConceptBlock, ImageBlock, MockBlock, ProblemBlock } from '../types';
 import { $, $$, el } from '../utils/dom';
 import { Icons } from '../utils/icons';
 
@@ -105,6 +105,48 @@ export function createRenderer(ctx: RenderContext) {
       disabled: disabled ? 'disabled' : undefined,
       onclick: fn,
     });
+  }
+
+  /** 파일 선택 창을 열어 고른 이미지를 그 칸에 넣는다. */
+  function pickImageFiles(b: ImageBlock): void {
+    const input = el('input', {
+      type: 'file',
+      accept: 'image/*',
+      multiple: 'true',
+      style: 'display:none',
+    }) as HTMLInputElement;
+    input.addEventListener('change', () => {
+      [...(input.files ?? [])].forEach((f) => void images.ingestFile(b, f));
+      input.remove();
+    });
+    input.addEventListener('cancel', () => input.remove());
+    document.body.appendChild(input);
+    input.click();
+  }
+
+  /**
+   * 칸(필드) 오른쪽 아래에 붙는 이미지·정돈 버튼 묶음.
+   * 사이드바까지 가지 않고 그 자리에서 이미지를 넣고 정돈할 수 있다.
+   */
+  function fieldTools(b: ImageBlock): HTMLElement {
+    const mk = (ico: string, title: string, fn: () => void) =>
+      el('button', {
+        class: 'ftb',
+        title,
+        html: ico,
+        onpointerdown: (e: Event) => e.stopPropagation(),
+        onclick: (e: Event) => {
+          e.stopPropagation();
+          fn();
+        },
+      });
+
+    return el('div', { class: 'field-tools' }, [
+      mk(Icons.image, '이미지 넣기 — 파일에서 선택', () => pickImageFiles(b)),
+      mk(Icons.axes, '좌표평면 넣기', () => images.addCoordPlane(b)),
+      mk(Icons.landscape, '가로 정돈 — 이미지를 한 줄로 나란히', () => images.arrangeImgsRow(b)),
+      mk(Icons.portrait, '세로 정돈 — 이미지를 위아래로 차곡차곡', () => images.arrangeImgs(b)),
+    ]);
   }
 
   // 인쇄 품질을 위해 줄/격자를 실제 border 요소로 그린다 (gradient는 인쇄 시 흐려짐).
@@ -358,8 +400,15 @@ export function createRenderer(ctx: RenderContext) {
   function renderBlock(b: Block, idx: number, typeNum: number): HTMLElement {
     const isHalf = b.type === 'mock' || (b.type === 'image' && b.width === 'half');
     const isImageOnly = b.type === 'image';
+    // 이미지 전용 블록은 기본이 제목행 숨김 — 클래스 계산 전에 확정한다.
+    if (isImageOnly && b.titleHidden == null) b.titleHidden = true;
     const node = el('div', {
-      class: 'block' + (isHalf ? ' half' : '') + (isImageOnly ? ' image-only' : ''),
+      class:
+        'block' +
+        (isHalf ? ' half' : '') +
+        (isImageOnly ? ' image-only' : '') +
+        // 제목행을 숨기면 블록 테두리(틀)까지 완전히 지운다.
+        (b.titleHidden ? ' headless' : ''),
       data: { id: String(b.id) },
     });
     node.style.height = b.h + 'px';
@@ -494,6 +543,7 @@ export function createRenderer(ctx: RenderContext) {
       panelLines(b.probBg),
       prob,
       layer,
+      fieldTools(b),
     ]);
 
     images.attachPaste(prob, b);
@@ -588,7 +638,11 @@ export function createRenderer(ctx: RenderContext) {
   ): { panel: HTMLElement; layer: HTMLElement } {
     const fld = field('f-cimg', '', b.imgHtml);
     const layer = el('div', { class: 'img-layer' });
-    const panel = el('div', { class: 'panel imgpanel', style: 'flex:1' }, [fld, layer]);
+    const panel = el('div', { class: 'panel imgpanel', style: 'flex:1' }, [
+      fld,
+      layer,
+      fieldTools(b),
+    ]);
     images.attachPaste(fld, b);
     images.enableImageDrop(panel, b);
     attachPanelTools(node, panel, b, 'cimg', true);
@@ -627,13 +681,15 @@ export function createRenderer(ctx: RenderContext) {
     const layer = el('div', { class: 'img-layer' });
     const drop = el('div', { class: 'imgonly-drop', tabindex: '0' });
 
-    const panel = el('div', { class: 'panel imgpanel imgonly', style: 'flex:1' }, [drop, layer]);
+    const panel = el('div', { class: 'panel imgpanel imgonly', style: 'flex:1' }, [
+      drop,
+      layer,
+      fieldTools(b),
+    ]);
 
     images.attachPaste(drop, b);
     images.enableImageDrop(panel, b);
     attachPanelTools(node, panel, b, 'main', true);
-
-    if (b.titleHidden == null) b.titleHidden = true;
 
     node.appendChild(el('div', { class: 'bbody col' }, [panel]));
     requestAnimationFrame(() => images.renderImages(b, layer));

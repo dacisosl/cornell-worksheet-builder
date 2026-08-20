@@ -397,6 +397,15 @@ button { font-family: inherit; cursor: pointer; }
   box-shadow: var(--shadow-card);
 }
 .block.image-only .bbody { flex: 1; min-height: 0; }
+/* 제목행 숨김: 블록 테두리(틀)까지 완전히 없앤다. 편집 중에만 옅은 안내선을 보여 준다. */
+.block.headless {
+  border-color: transparent;
+  background: transparent;
+}
+.block.headless:hover { border-color: rgba(46,75,115,.18); }
+.block.headless.dragging,
+.block.headless.resizing { border-color: rgba(46,75,115,.28); }
+
 .block.dragging { opacity: .4; }
 .block.drop-before { box-shadow: 0 -3px 0 var(--accent); }
 .block.drop-after  { box-shadow: 0 3px 0 var(--accent); }
@@ -713,6 +722,28 @@ button { font-family: inherit; cursor: pointer; }
 .minibtn:hover { border-color: var(--accent); color: var(--accent); }
 .minibtn svg { width: 13px; height: 13px; }
 .panel.drag-over { box-shadow: inset 0 0 0 2px var(--accent); }
+
+/* ── 칸 오른쪽 아래 이미지·정돈 버튼 ── */
+.field-tools {
+  position: absolute; right: 6px; bottom: 6px; z-index: 22;
+  display: flex; gap: 2px; padding: 2px;
+  background: rgba(255,255,255,.92);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  box-shadow: 0 1px 4px rgba(40,38,32,.10);
+  opacity: .28; transition: opacity .12s;
+}
+.panel:hover > .field-tools,
+.panel-active > .field-tools,
+.field-tools:hover,
+.field-tools:focus-within { opacity: 1; }
+.ftb {
+  width: 26px; height: 26px; border: none; background: transparent;
+  color: var(--ink-soft); border-radius: 6px;
+  display: grid; place-items: center; padding: 0;
+}
+.ftb:hover { background: var(--accent-soft); color: var(--accent); }
+.ftb svg { width: 15px; height: 15px; }
 
 .img-layer { position: absolute; inset: 0; pointer-events: none; z-index: 4; overflow: hidden; }
 .imgobj { position: absolute; pointer-events: auto; cursor: grab; touch-action: none; }
@@ -1078,7 +1109,11 @@ button { font-family: inherit; cursor: pointer; }
   .dt-drag,
   .crop-box,
   .bhead.compact,
+  .field-tools,
   .galign { display: none !important; }
+
+  /* 제목행을 숨긴 블록은 인쇄에서도 테두리가 없다 */
+  .block.headless { border-color: transparent !important; background: transparent !important; }
 
   /* 필기용 모드: 여백은 그대로 인쇄하고 안내선만 감춘다 */
   .sheet-book.note-mode .page-inner { outline: none !important; }

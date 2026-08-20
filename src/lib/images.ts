@@ -298,6 +298,8 @@ export function createImageService(ctx: ImageContext) {
 
   // 필드 밖(이미지 선택 상태)에서의 붙여넣기 — 선택된 이미지가 있는 칸에 넣는다.
   document.addEventListener('paste', (e) => {
+    // 칸(필드)에서 이미 처리한 붙여넣기면 여기서 또 넣지 않는다.
+    if (e.defaultPrevented) return;
     if (isTextEditing()) return;
     if (!store.selected) return;
     const b = store.findBlock(store.selected.b);
@@ -610,11 +612,14 @@ export function createImageService(ctx: ImageContext) {
     }
   }
 
-  /** 좌표평면 이미지를 캔버스로 그려 dataURL로 만든다. */
-  function coordPlaneDataURL(): string {
-    const size = 800;
-    const cells = 10;
+  /**
+   * 좌표평면 이미지를 캔버스로 그려 dataURL로 만든다.
+   * 인쇄에서도 또렷하도록 고해상도로 그리고, 축에 눈금을 표시한다.
+   */
+  function coordPlaneDataURL(cells = 10): string {
+    const size = 1200;
     const step = size / cells;
+    const mid = size / 2;
     const c = document.createElement('canvas');
     c.width = size;
     c.height = size;
@@ -623,8 +628,9 @@ export function createImageService(ctx: ImageContext) {
     g.fillStyle = '#ffffff';
     g.fillRect(0, 0, size, size);
 
-    g.strokeStyle = '#ccd1d9';
-    g.lineWidth = 1;
+    // 격자
+    g.strokeStyle = '#b7bfcb';
+    g.lineWidth = 1.4;
     for (let i = 0; i <= cells; i++) {
       const p = Math.round(i * step) + 0.5;
       g.beginPath();
@@ -637,10 +643,10 @@ export function createImageService(ctx: ImageContext) {
       g.stroke();
     }
 
-    const mid = size / 2;
-    g.strokeStyle = '#2b2e33';
-    g.fillStyle = '#2b2e33';
-    g.lineWidth = 2.5;
+    // 축
+    g.strokeStyle = '#1f2328';
+    g.fillStyle = '#1f2328';
+    g.lineWidth = 3.4;
     g.beginPath();
     g.moveTo(0, mid);
     g.lineTo(size, mid);
@@ -648,25 +654,40 @@ export function createImageService(ctx: ImageContext) {
     g.lineTo(mid, size);
     g.stroke();
 
+    // 눈금
+    g.lineWidth = 2.2;
+    const tick = 9;
+    for (let i = 0; i <= cells; i++) {
+      const p = Math.round(i * step) + 0.5;
+      if (Math.abs(p - mid) < 1) continue;
+      g.beginPath();
+      g.moveTo(p, mid - tick);
+      g.lineTo(p, mid + tick);
+      g.moveTo(mid - tick, p);
+      g.lineTo(mid + tick, p);
+      g.stroke();
+    }
+
     // 화살촉 (x축 오른쪽, y축 위쪽)
+    const ah = 20;
     g.beginPath();
     g.moveTo(size, mid);
-    g.lineTo(size - 14, mid - 6);
-    g.lineTo(size - 14, mid + 6);
+    g.lineTo(size - ah, mid - ah * 0.45);
+    g.lineTo(size - ah, mid + ah * 0.45);
     g.closePath();
     g.fill();
     g.beginPath();
     g.moveTo(mid, 0);
-    g.lineTo(mid - 6, 14);
-    g.lineTo(mid + 6, 14);
+    g.lineTo(mid - ah * 0.45, ah);
+    g.lineTo(mid + ah * 0.45, ah);
     g.closePath();
     g.fill();
 
-    g.font = 'italic 26px Georgia, serif';
-    g.fillText('x', size - 24, mid + 28);
-    g.fillText('y', mid + 12, 26);
-    g.font = '24px Georgia, serif';
-    g.fillText('O', mid - 26, mid + 26);
+    g.font = 'italic 40px Georgia, serif';
+    g.fillText('x', size - 36, mid + 42);
+    g.fillText('y', mid + 18, 40);
+    g.font = '34px Georgia, serif';
+    g.fillText('O', mid - 40, mid + 38);
 
     return c.toDataURL('image/png');
   }
