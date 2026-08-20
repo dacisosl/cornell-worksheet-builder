@@ -158,6 +158,11 @@ class CsvCurriculum {
     return this.rows;
   }
 
+  /** 전체 행 — 내용 기반 검색용 */
+  async all(): Promise<StandardRow[]> {
+    return this.load();
+  }
+
   async resolve(code: string): Promise<StandardRow | null> {
     const rows = await this.load();
     const want = code.replace(/[[\]]/g, '');
@@ -327,6 +332,81 @@ export async function searchStandards(query: {
   limit?: number;
 }): Promise<StandardRow[]> {
   return curriculum.search(query);
+}
+
+/** 검색어를 낱말로 쪼갠다 ("함수의 극한과 연속" → 함수의·극한과·연속) */
+function tokenize(text: string): string[] {
+  return text
+    .split(/[^가-힣A-Za-z0-9]+/)
+    .map((t) => t.trim())
+    .filter((t) => t.length >= 2);
+}
+
+/**
+ * 성취기준 원문과 낱말이 얼마나 겹치는지 점수를 낸다.
+ * 조사가 붙어 있어도 되도록 뒤에서 한 글자씩 줄여 가며 가장 긴 일치를 찾는다
+ * (함수의 → 함수 ✓). 긴 일치일수록 높은 점수.
+ */
+function scoreRow(text: string, tokens: string[]): number {
+  let score = 0;
+  for (const t of tokens) {
+    for (let len = t.length; len >= 2; len--) {
+      if (text.includes(t.slice(0, len))) {
+        score += len;
+        break;
+      }
+    }
+  }
+  return score;
+}
+
+export interface StandardMatch {
+  rows: StandardRow[];
+  /** 가장 잘 맞은 성취기준의 과목 — 고교 세부 과목(미적분Ⅰ 등)을 여기서 알아낸다 */
+  subject: string;
+  /** 낱말이 실제로 겹쳐서 고른 것인지 (false면 과목 대표 성취기준으로 채운 것) */
+  matched: boolean;
+}
+
+/**
+ * 학습지 내용에 **가장 잘 어울리는** 성취기준을 찾는다.
+ * 과목을 미리 찍지 않고, 후보 과목 전체에서 낱말이 겹치는 순으로 고른다.
+ * 겹치는 게 없으면 힌트 과목의 대표 성취기준으로 채워 절대 빈손으로 돌아가지 않는다.
+ */
+export async function findStandards(opts: {
+  school?: string;
+  /** 후보 과목 목록 (고교 수학이면 8개 과목 전체). 비우면 학교급 전체 */
+  subjects?: string[];
+  keywords: string[];
+  limit?: number;
+}): Promise<StandardMatch | null> {
+  const { school, subjects, keywords, limit = 4 } = opts;
+  const rows = await curriculum.all();
+  const pool = rows.filter((r) => {
+    if (school && !r.school.includes(school)) return false;
+    if (subjects?.length && !subjects.some((s) => r.subject === s)) return false;
+    return true;
+  });
+  if (!pool.length) return null;
+
+  const tokens = tokenize(keywords.join(' '));
+  const scored = pool
+    .map((r) => ({ r, s: scoreRow(r.text, tokens) }))
+    .filter((x) => x.s > 0)
+    .sort((a, b) => b.s - a.s);
+
+  if (!scored.length) {
+    // 겹치는 낱말이 없다 — 첫 후보 과목의 대표 성취기준으로 채운다.
+    const subj = subjects?.[0] ?? pool[0].subject;
+    const rep = pool.filter((r) => r.subject === subj).slice(0, limit);
+    const use = rep.length ? rep : pool.slice(0, limit);
+    return { rows: use, subject: use[0].subject, matched: false };
+  }
+
+  // 가장 잘 맞은 성취기준의 과목으로 통일한다 (학교급·과목 혼합 방지).
+  const best = scored[0].r.subject;
+  const same = scored.filter((x) => x.r.subject === best).slice(0, limit);
+  return { rows: same.map((x) => x.r), subject: best, matched: true };
 }
 
 /** 아키타입 목록 (벤더 데이터가 단일 진실원천) */

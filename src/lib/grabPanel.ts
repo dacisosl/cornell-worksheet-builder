@@ -19,6 +19,7 @@ import {
 } from './aiClient';
 import {
   GRAB_ARCHETYPES,
+  HIGH_MATH_COURSES,
   SYSTEM_PROMPT,
   buildDigest,
   buildUserPrompt,
@@ -368,6 +369,7 @@ export function createGrabPanel(ctx: GrabPanelContext) {
     skipped: number;
     leak: boolean;
     findings: string[];
+    standards: { code: string; text: string; subject: string }[];
   }
 
   /** 학생용/교사용 HTML을 새 창에서 연다 (인쇄로 PDF 저장). */
@@ -409,6 +411,22 @@ export function createGrabPanel(ctx: GrabPanelContext) {
         ].filter(Boolean) as HTMLElement[]),
         b.findings.length
           ? el('ul', { class: 'gp-ul' }, b.findings.slice(0, 6).map((f) => el('li', { text: f })))
+          : null,
+        b.standards.length
+          ? el('details', { class: 'gp-std' }, [
+              el('summary', {
+                text: `근거 성취기준 ${b.standards.length}개${b.standards[0].subject ? ` · ${b.standards[0].subject}` : ''}`,
+              }),
+              el(
+                'ul',
+                { class: 'gp-ul' },
+                b.standards.map((st) => el('li', { text: `${st.code} ${st.text}` })),
+              ),
+              el('p', {
+                class: 'gp-hint',
+                text: '교육과정 자료에서 조회한 원문입니다. 인쇄물에는 나오지 않고, 학습 목표를 잡는 근거로만 씁니다.',
+              }),
+            ])
           : null,
         el('div', { class: 'gp-tabs' }, [tab('학생용', b.student, true), tab('교사용', b.teacher)]),
         frame,
@@ -456,13 +474,17 @@ export function createGrabPanel(ctx: GrabPanelContext) {
 
   type GrabEngine = typeof import('./grabRuntime');
 
+  /** 이번에 쓰인 성취기준 — 결과 화면에 보여 준다 */
+  let usedStandards: { code: string; text: string; subject: string }[] = [];
+
   /**
    * 엔진 조립을 실패 없이 통과시키는 호출 체인.
-   * 교사가 세부 정보를 채우지 않아도, 분석 결과와 성취기준 CSV로 알아서 해결한다.
+   * 교사가 과목·성취기준을 몰라도 되도록, **학습지 내용에서 성취기준을 먼저 찾고**
+   * 그 성취기준의 과목을 그대로 쓴다 (고교 세부 과목도 이렇게 정해진다).
    *
-   *  1차: AI가 정한 세부 과목(고교 수학이면 course)으로 그대로 조립
-   *  2차: 세부 과목이 없거나 거부되면 — CSV에서 키워드로 성취기준을 직접 찾아 코드로 조립
-   *  3차: 코드도 못 찾으면 — 학년에 맞는 기본 과목으로 조립 (고1→공통수학1, 그 외→대수)
+   *  1차: 내용에 가장 잘 맞는 성취기준 → 그 과목 + 코드로 조립
+   *  2차: 실패하면 AI가 말한 과목 그대로 (엔진 자체 검색)
+   *  3차: 그래도 안 되면 학교급 전체에서 다시 찾아 조립
    *  덤 : 아키타입이 그 교과에 안 맞으면 엔진 추천으로 되돌린다
    */
   async function composeResilient(engine: GrabEngine, plan: GrabPlan): Promise<ComposeResult> {
@@ -471,17 +493,20 @@ export function createGrabPanel(ctx: GrabPanelContext) {
     const baseSubject = plan.subjectLabel || '과학';
     const course = normalizeCourse(plan.course);
     const topic = plan.topic || store.state.meta.title || '활동';
-    const isHighMath = school === '고등학교' && plan.subject === 'math';
+
+    // 학습지에서 뽑은 말들 — 주제·키워드·학습목표 순으로 성취기준을 찾는다.
+    const keywords = [topic, ...plan.standardsKeywords, ...plan.objectives];
+
+    /** 고교 수학이면 8개 과목 전체가 후보, 아니면 그 교과만 */
+    const candidateSubjects =
+      school === '고등학교' && plan.subject === 'math'
+        ? [...HIGH_MATH_COURSES]
+        : course
+          ? [course]
+          : [baseSubject];
 
     const attempt = (subject: string, codes: string[] | null, archetype: string | null) =>
-      engine.compose({
-        grade,
-        subject,
-        topic,
-        archetype,
-        codes,
-        objectives: plan.objectives,
-      });
+      engine.compose({ grade, subject, topic, archetype, codes, objectives: plan.objectives });
 
     /** 아키타입 불일치는 어느 단계에서든 엔진 추천으로 한 번 되돌린다. */
     const withArchetypeFallback = async (
@@ -496,42 +521,38 @@ export function createGrabPanel(ctx: GrabPanelContext) {
       }
     };
 
-    // 1차 — AI가 정한 과목 그대로
-    try {
-      return await withArchetypeFallback(course || baseSubject, null);
-    } catch (err1) {
-      // 2차 — 성취기준을 CSV에서 직접 찾아 코드로 지정 (코드가 있으면 세부 과목 요구가 풀린다)
-      const codes: string[] = [];
-      const seen = new Set<string>();
-      for (const kw of [...plan.standardsKeywords, topic]) {
-        if (codes.length >= 6) break;
-        const rows = await engine.searchStandards({
-          school: school || undefined,
-          subject: baseSubject,
-          keyword: kw,
-          limit: 6 - codes.length,
-        });
-        rows.forEach((r) => {
-          if (!seen.has(r.code)) {
-            seen.add(r.code);
-            codes.push(r.code);
-          }
-        });
-      }
-      if (codes.length) {
-        try {
-          return await withArchetypeFallback(baseSubject, codes);
-        } catch {
-          /* 3차로 넘어간다 */
-        }
-      }
+    /** 성취기준을 찾아 그 과목으로 조립한다. */
+    const byContent = async (subjects: string[] | undefined): Promise<ComposeResult | null> => {
+      const hit = await engine.findStandards({
+        school: school || undefined,
+        subjects,
+        keywords,
+      });
+      if (!hit) return null;
+      usedStandards = hit.rows.map((r) => ({ code: r.code, text: r.text, subject: r.subject }));
+      return withArchetypeFallback(
+        hit.subject,
+        hit.rows.map((r) => r.code),
+      );
+    };
 
-      // 3차 — 학년 기본 과목 (고교 수학에서만 의미가 있다)
-      if (isHighMath) {
-        const fallback = /고\s*1/.test(grade) ? '공통수학1' : '대수';
-        return withArchetypeFallback(fallback, null);
-      }
-      throw err1;
+    // 1차 — 내용에 맞는 성취기준으로
+    try {
+      const built = await byContent(candidateSubjects);
+      if (built) return built;
+    } catch {
+      /* 2차로 */
+    }
+
+    // 2차 — AI가 말한 과목 그대로 (엔진이 알아서 검색)
+    try {
+      usedStandards = [];
+      return await withArchetypeFallback(course || baseSubject, null);
+    } catch (err2) {
+      // 3차 — 후보 과목 제한을 풀고 학교급 전체에서 다시
+      const wide = await byContent(undefined);
+      if (wide) return wide;
+      throw err2;
     }
   }
 
@@ -582,7 +603,15 @@ export function createGrabPanel(ctx: GrabPanelContext) {
         .map((f) => String(f.message ?? JSON.stringify(f)))
         .filter(Boolean);
 
-      built = { manifest, student, teacher, filled, skipped, leak: !check.ok, findings };
+      // 엔진이 실제로 쓴 성취기준 (직접 고른 게 없으면 매니페스트에서 읽는다)
+      const standards = usedStandards.length
+        ? usedStandards
+        : (manifest.standards ?? []).map((code) => ({
+            code,
+            text: manifest.standardsText?.[code] ?? '',
+            subject: '',
+          }));
+      built = { manifest, student, teacher, filled, skipped, leak: !check.ok, findings, standards };
       resultEl.appendChild(renderBuilt(built));
       resultEl.appendChild(renderResult(analyzed));
       setStatus(
