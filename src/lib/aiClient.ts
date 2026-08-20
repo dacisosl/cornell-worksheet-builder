@@ -25,8 +25,8 @@ export const PROVIDER_KEY_URL: Record<Provider, string> = {
 };
 
 const DEFAULT_MODELS: Record<Provider, string> = {
-  openrouter: 'google/gemini-2.5-flash',
-  gemini: 'gemini-2.5-flash',
+  openrouter: 'google/gemini-3.7-flash',
+  gemini: 'gemini-3.7-flash',
 };
 
 export interface CuratedModel {
@@ -36,25 +36,99 @@ export interface CuratedModel {
 }
 
 /**
- * 바로 고를 수 있는 추천 모델.
- * 목록은 참고용 — '전체 모델 불러오기'로 제공자의 실시간 목록을 받아 고를 수도 있다.
+ * 바로 고를 수 있는 추천 모델 — 2026-08 기준 확인본.
+ * OpenRouter 쪽은 패널을 열 때 실시간 목록으로 자동 갱신되므로 (fetchLatestCurated)
+ * 이 정적 목록은 네트워크가 안 될 때의 폴백이다.
  */
 export const CURATED_MODELS: Record<Provider, CuratedModel[]> = {
   openrouter: [
-    { id: 'google/gemini-2.5-flash', label: 'Gemini 2.5 Flash', note: '빠르고 저렴 — 기본값' },
-    { id: 'google/gemini-2.5-pro', label: 'Gemini 2.5 Pro', note: '구글 고성능' },
-    { id: 'google/gemini-3-pro-preview', label: 'Gemini 3 Pro', note: '구글 최신 고성능' },
-    { id: 'openai/gpt-4o', label: 'GPT-4o', note: '오픈AI 범용' },
-    { id: 'openai/gpt-5.1', label: 'GPT-5.1', note: '오픈AI 고성능' },
-    { id: 'anthropic/claude-sonnet-4.5', label: 'Claude Sonnet 4.5', note: '앤트로픽 균형형' },
-    { id: 'anthropic/claude-opus-4.5', label: 'Claude Opus 4.5', note: '앤트로픽 고성능 — 비쌈' },
+    { id: 'google/gemini-3.7-flash', label: 'Gemini 3.7 Flash', note: '빠르고 저렴 — 기본 추천' },
+    { id: 'google/gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro', note: '구글 고성능' },
+    { id: 'openai/gpt-5.2', label: 'GPT-5.2', note: '오픈AI 고성능' },
+    { id: 'openai/gpt-5.5', label: 'GPT-5.5', note: '오픈AI 최신 최상위' },
+    { id: 'anthropic/claude-sonnet-5', label: 'Claude Sonnet 5', note: '앤트로픽 균형형' },
+    { id: 'anthropic/claude-opus-5', label: 'Claude Opus 5', note: '앤트로픽 최상위 — 비쌈' },
+    { id: 'google/gemini-2.5-flash', label: 'Gemini 2.5 Flash', note: '가장 저렴한 구형' },
   ],
   gemini: [
-    { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', note: '빠르고 저렴 — 기본값' },
-    { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro', note: '고성능' },
-    { id: 'gemini-3-pro-preview', label: 'Gemini 3 Pro', note: '최신 고성능' },
+    { id: 'gemini-3.7-flash', label: 'Gemini 3.7 Flash', note: '최신 — 빠르고 저렴' },
+    { id: 'gemini-3.6-flash', label: 'Gemini 3.6 Flash', note: '한 세대 전' },
+    { id: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro', note: '고성능' },
+    { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', note: '구형 — 저렴' },
   ],
 };
+
+const CURATED_CACHE_KEY = 'cornell-ai-curated-v1';
+const CURATED_TTL_MS = 24 * 60 * 60 * 1000;
+
+interface OpenRouterModel {
+  id?: string;
+  name?: string;
+  created?: number;
+  pricing?: { prompt?: string; completion?: string };
+}
+
+/** 이름에 이런 말이 들어간 변형은 학습지 저작용 추천에서 뺀다 */
+const EXCLUDE = /(:free|:extended|-fast|realtime|audio|image|search|distill|exp)/i;
+
+/**
+ * OpenRouter 공개 목록에서 주요 3사(구글·오픈AI·앤트로픽)의 **최신 모델**을 뽑아
+ * 추천 목록을 만든다. 실패하면 null — 정적 CURATED_MODELS 를 그대로 쓴다.
+ * 하루 캐시해서 패널을 열 때마다 다시 받지 않는다.
+ */
+export async function fetchLatestCurated(): Promise<CuratedModel[] | null> {
+  try {
+    const cached = localStorage.getItem(CURATED_CACHE_KEY);
+    if (cached) {
+      const { at, list } = JSON.parse(cached) as { at: number; list: CuratedModel[] };
+      if (Date.now() - at < CURATED_TTL_MS && Array.isArray(list) && list.length) return list;
+    }
+  } catch {
+    /* 캐시 파손 — 새로 받는다 */
+  }
+
+  try {
+    const res = await fetch('https://openrouter.ai/api/v1/models');
+    if (!res.ok) return null;
+    const body = (await res.json()) as { data?: OpenRouterModel[] };
+    const models = (body.data ?? []).filter(
+      (m): m is Required<Pick<OpenRouterModel, 'id'>> & OpenRouterModel =>
+        !!m.id && !EXCLUDE.test(m.id),
+    );
+
+    const families: { prefix: string; take: number; note: string }[] = [
+      { prefix: 'google/gemini', take: 2, note: '구글' },
+      { prefix: 'openai/gpt', take: 2, note: '오픈AI' },
+      { prefix: 'anthropic/claude', take: 2, note: '앤트로픽' },
+    ];
+
+    const list: CuratedModel[] = [];
+    for (const f of families) {
+      const hits = models
+        .filter((m) => m.id.startsWith(f.prefix))
+        .sort((a, b) => (b.created ?? 0) - (a.created ?? 0))
+        .slice(0, f.take);
+      hits.forEach((m) => {
+        const out = Number(m.pricing?.completion ?? 0) * 1e6;
+        const price = out > 0 ? ` · 출력 $${out < 10 ? out.toFixed(2) : Math.round(out)}/1M` : '';
+        list.push({
+          id: m.id,
+          label: (m.name ?? m.id).replace(/^.*?:\s*/, ''),
+          note: `${f.note} 최신${price}`,
+        });
+      });
+    }
+    if (!list.length) return null;
+    try {
+      localStorage.setItem(CURATED_CACHE_KEY, JSON.stringify({ at: Date.now(), list }));
+    } catch {
+      /* 저장 실패는 무시 */
+    }
+    return list;
+  } catch {
+    return null;
+  }
+}
 
 export function defaultSettings(): AiSettings {
   return {

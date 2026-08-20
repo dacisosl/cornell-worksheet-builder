@@ -5,6 +5,7 @@
 
 import {
   CURATED_MODELS,
+  fetchLatestCurated,
   PROVIDER_KEY_URL,
   PROVIDER_LABEL,
   activeKey,
@@ -119,9 +120,15 @@ export function createGrabPanel(ctx: GrabPanelContext) {
     const modelList = el('datalist', { id: 'gpModels' }) as HTMLDataListElement;
     modelInput.setAttribute('list', 'gpModels');
 
+    // OpenRouter 는 실시간 목록으로 갱신된 추천을 쓴다 (실패 시 정적 폴백)
+    let liveCurated: typeof CURATED_MODELS.openrouter | null = null;
+
     function fillModelSelect(): void {
       const cur = settings.models[settings.provider];
-      const curated = CURATED_MODELS[settings.provider];
+      const curated =
+        settings.provider === 'openrouter' && liveCurated?.length
+          ? liveCurated
+          : CURATED_MODELS[settings.provider];
       modelSelect.innerHTML = '';
       curated.forEach((m) => {
         modelSelect.appendChild(
@@ -134,6 +141,13 @@ export function createGrabPanel(ctx: GrabPanelContext) {
       modelInput.style.display = inList ? 'none' : '';
       modelInput.value = cur;
     }
+
+    // 백그라운드로 최신 모델을 받아 추천 목록을 갈아 끼운다 — 목록이 낡지 않게.
+    void fetchLatestCurated().then((list) => {
+      if (!list?.length) return;
+      liveCurated = list;
+      if (settings.provider === 'openrouter') fillModelSelect();
+    });
 
     modelSelect.addEventListener('change', () => {
       if (modelSelect.value === CUSTOM) {
