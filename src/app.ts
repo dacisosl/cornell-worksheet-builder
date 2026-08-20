@@ -13,7 +13,6 @@ import { makeBlock } from './lib/blocks';
 import { hasImages } from './lib/blocks';
 import { createDrawService } from './lib/draw';
 import { createImageService } from './lib/images';
-import { createGrabPanel } from './lib/grabPanel';
 import { createInteractions } from './lib/interactions';
 import { createPagination } from './lib/pagination';
 import { createRenderer, type PanelInfo } from './lib/render';
@@ -147,12 +146,6 @@ export function createApp(root: HTMLElement) {
       // 새 블록의 첫 칸이 기준이 되도록, 블록만 기억하고 칸 키는 비워 둔다.
       pickedPanel = { blockId: id, key: '' };
     },
-  });
-
-  const grabPanel = createGrabPanel({
-    store,
-    syncFromDOM: () => renderer.syncFromDOM(),
-    safeTitle: () => safeTitle(),
   });
 
   function setZoom(z: number): void {
@@ -339,12 +332,6 @@ export function createApp(root: HTMLElement) {
           title: '현재 학습지를 JSON 파일로 저장',
           html: Icons.download + '<span>저장</span>',
           onclick: exportWorksheet,
-        }),
-        el('button', {
-          class: 'tbtn ghost grab',
-          title: '1차 초안을 AI로 분석해 worksheet-grab 요청문을 만듭니다',
-          html: Icons.spark + '<span>워크시트그랩</span>',
-          onclick: () => grabPanel.open(),
         }),
         el('button', {
           class: 'tbtn ghost',
