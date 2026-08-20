@@ -1,0 +1,107 @@
+/* 손그림(sketch) 무드 — 테두리 손그림 레이어. **엔진 소유 CSS**이며 무드 지정 시에만 주입된다.
+ *
+ * 왜 무드 CSS(themes/moods/sketch.css)가 아니라 여기인가:
+ * 무드 파일은 가드가 `content`·`position` 을 금지한다(AI·디자이너가 조판을 깨는 것을 막는 규칙).
+ * 그런데 이 기법은 둘 다 필요하다. 기법(메커니즘)은 엔진이 소유하고 무드는 값만 소유한다는
+ * 원칙에 따라 엔진 자산으로 두고, 무드는 이 파일의 존재 여부로만 켜진다.
+ *
+ * 왜 테두리를 가짜 요소로 옮기는가:
+ * CSS `filter` 는 요소와 **그 자손 전체**에 걸린다. 상자에 직접 걸면 안의 글자까지 래스터화되어
+ * PDF 텍스트가 무너진다(실측: 표시 연산자 1305 → 536, 41%). `::before` 는 형제 텍스트와 분리된
+ * 별개 페인트 레이어라, 테두리만 옮겨 걸면 글자는 벡터로 남는다(실측: 1305 → 1305, 100%).
+ *
+ * 그래서 각 상자는 자기 테두리를 투명하게 만들고, 같은 자리에 같은 두께·같은 모서리로 테두리를
+ * 다시 그린 뒤 그 레이어에만 필터를 건다. 색은 원래 색을 잃지 않도록 --wg-frame-ink 로 물려준다
+ * (계열마다 --c2 / --wg-rule-color 로 달랐다 — 한 색으로 뭉개면 무드 디자인이 깨진다).
+ *
+ * 표 셀도 같은 기법을 쓴다. sketch.css 가 border-collapse:separate 를 켜 둬서 셀마다 자기 테두리를
+ * 가지므로 셀 단위 레이어가 성립한다.
+ */
+
+/* 규칙은 하나다 — **글자를 담을 수 있는 것은 전부 레이어**로, 글자를 담지 않는 선·표식만 직접.
+ * 목록을 좁게 잡으면 조용히 빠진다: 첫 판에서 시각 조직자 표(kwl·bme·exit321 등 12종)와
+ * passage·dialogue 가 누락돼 실제 활동지에서 그 부분만 자로 잰 선으로 나왔다. */
+
+/* ── 테두리 잉크: 원래 계열 색을 보존한다(한 색으로 뭉개면 무드 디자인이 깨진다) ── */
+.title-box, .callout, .hbox, .dash-box, .mapbox, .dialogue { --wg-frame-ink: var(--c2); }
+.std-box, .qbox, .strip, .princ, .formula, .ansbox, .passage, .workspace, .stepfill, .sf-blank {
+  --wg-frame-ink: var(--wg-rule-color, #cbd5c0);
+}
+.obj-table th, .obj-table td, .lv-table td, .data th, .data td,
+.memo th, .memo td, .rubric th, .rubric td, .vartable td, .vocab th, .vocab td,
+.pc th, .pc td, .cmp th, .cmp td, .q-match .q-match-l, .q-match .q-match-r,
+.kwl th, .kwl td, .frayer th, .frayer td, .w5h1 th, .w5h1 td,
+.bme th, .bme td, .exit321 th, .exit321 td, .mainidea th, .mainidea td,
+.notetaking th, .notetaking td, .hamburger th, .hamburger td,
+.perspectives th, .perspectives td, .prediction th, .prediction td,
+.glowgrow th, .glowgrow td, .stoplight th, .stoplight td {
+  --wg-frame-ink: var(--wg-tb-color, var(--wg-rule-color, #cbd5c0));
+}
+
+/* ── 원래 테두리는 자리(두께·간격)만 남기고 잉크를 숨긴다 ── */
+.title-box, .std-box, .callout, .qbox, .hbox, .dash-box, .strip, .mapbox,
+.princ, .formula, .ansbox, .passage, .dialogue, .workspace, .stepfill, .sf-blank,
+.obj-table th, .obj-table td, .lv-table td, .data th, .data td,
+.memo th, .memo td, .rubric th, .rubric td, .vartable td, .vocab th, .vocab td,
+.pc th, .pc td, .cmp th, .cmp td, .q-match .q-match-l, .q-match .q-match-r,
+.kwl th, .kwl td, .frayer th, .frayer td, .w5h1 th, .w5h1 td,
+.bme th, .bme td, .exit321 th, .exit321 td, .mainidea th, .mainidea td,
+.notetaking th, .notetaking td, .hamburger th, .hamburger td,
+.perspectives th, .perspectives td, .prediction th, .prediction td,
+.glowgrow th, .glowgrow td, .stoplight th, .stoplight td {
+  position: relative;
+  border-color: transparent;
+}
+
+/* ── 같은 자리에 테두리를 다시 그리고, 이 레이어에만 필터를 건다 ── */
+.title-box::before, .std-box::before, .callout::before, .qbox::before, .hbox::before,
+.dash-box::before, .strip::before, .mapbox::before, .princ::before, .formula::before,
+.ansbox::before, .passage::before, .dialogue::before, .workspace::before,
+.stepfill::before, .sf-blank::before,
+.obj-table th::before, .obj-table td::before, .lv-table td::before,
+.data th::before, .data td::before, .memo th::before, .memo td::before,
+.rubric th::before, .rubric td::before, .vartable td::before, .vocab th::before, .vocab td::before,
+.pc th::before, .pc td::before, .cmp th::before, .cmp td::before,
+.q-match .q-match-l::before, .q-match .q-match-r::before,
+.kwl th::before, .kwl td::before, .frayer th::before, .frayer td::before,
+.w5h1 th::before, .w5h1 td::before, .bme th::before, .bme td::before,
+.exit321 th::before, .exit321 td::before, .mainidea th::before, .mainidea td::before,
+.notetaking th::before, .notetaking td::before, .hamburger th::before, .hamburger td::before,
+.perspectives th::before, .perspectives td::before, .prediction th::before, .prediction td::before,
+.glowgrow th::before, .glowgrow td::before, .stoplight th::before, .stoplight td::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: inherit;
+  border-color: var(--wg-frame-ink);
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* 큰 상자는 파장을 길게(손으로 죽 그은 획), 칸은 짧게(작은 칸에 긴 파장을 주면 뭉갠다). */
+.title-box::before, .std-box::before, .callout::before, .qbox::before, .hbox::before,
+.dash-box::before, .strip::before, .mapbox::before, .princ::before, .formula::before,
+.ansbox::before, .passage::before, .dialogue::before, .workspace::before, .stepfill::before {
+  filter: url(#wg-rough);
+}
+.sf-blank::before,
+.obj-table th::before, .obj-table td::before, .lv-table td::before,
+.data th::before, .data td::before, .memo th::before, .memo td::before,
+.rubric th::before, .rubric td::before, .vartable td::before, .vocab th::before, .vocab td::before,
+.pc th::before, .pc td::before, .cmp th::before, .cmp td::before,
+.q-match .q-match-l::before, .q-match .q-match-r::before,
+.kwl th::before, .kwl td::before, .frayer th::before, .frayer td::before,
+.w5h1 th::before, .w5h1 td::before, .bme th::before, .bme td::before,
+.exit321 th::before, .exit321 td::before, .mainidea th::before, .mainidea td::before,
+.notetaking th::before, .notetaking td::before, .hamburger th::before, .hamburger td::before,
+.perspectives th::before, .perspectives td::before, .prediction th::before, .prediction td::before,
+.glowgrow th::before, .glowgrow td::before, .stoplight th::before, .stoplight td::before {
+  filter: url(#wg-rough-fine);
+}
+
+/* ── 글자를 담지 않는 선·표식은 레이어 없이 요소에 직접 건다(래스터화될 글자가 없다) ── */
+.ans-line, .q-short-line, .note-under, .q-box, .q-order-box, .namefield span,
+.exit321 .wr, .mainidea .wr, .notetaking .wr, .hamburger .wr, .stoplight .wr {
+  filter: url(#wg-rough-fine);
+}

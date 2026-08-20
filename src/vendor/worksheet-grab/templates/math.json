@@ -1,0 +1,153 @@
+{
+  "id": "math-template",
+  "subject": "math",
+  "dataSubject": "math",
+  "paper": {
+    "size": "A4",
+    "columns": 2
+  },
+  "theme": "math",
+  "lang": "ko",
+  "head": {
+    "katex": true
+  },
+  "pillDefault": "개념과 연습",
+  "runHeadTemplate": "2022 개정 교육과정 · {subjectLabel} · 개념 연습 활동지",
+  "runFootTemplate": {
+    "left": "2022 개정 교육과정 연계 {subjectLabel} 활동지",
+    "rightPrefix": "{topic} 연습"
+  },
+  "slots": {
+    "DIRECTIVE": "핵심 개념을 확인하고, 예제의 풀이 과정을 따라간 뒤 같은 방법으로 스스로 풀어 보자.",
+    "REF": "{school} {subjectLabel}",
+    "UNIT": "{topic}",
+    "CONCEPT": "［개념 정리 슬롯］ 이 차시의 핵심 정의·공식·기호를 교사가 입력합니다. (수식은 달러 기호 사이에 입력)",
+    "EXAMPLE": "［예제 슬롯］ 대표 예제를 입력합니다.",
+    "SOLUTION": "［풀이 과정 슬롯］ 단계별 풀이 과정을 입력합니다. (학생과 함께 따라가는 풀이 — 학생용에도 보입니다)",
+    "TWINQ": "［쌍둥이 문제 슬롯］ 예제와 같은 유형·다른 수치의 문제를 입력합니다.",
+    "ST1": "식을 변형(인수분해·유리화)하면",
+    "SA1": "［1단계 답 슬롯］",
+    "ST2": "공통인 부분을 정리하면",
+    "SA2": "［2단계 답 슬롯］",
+    "ST3": "따라서 구하는 값은",
+    "SA3": "［3단계 답 슬롯］",
+    "P1": "［연습 문제 1 슬롯］",
+    "A1": "［연습 1 모범 풀이 슬롯］",
+    "P2": "［연습 문제 2 슬롯］",
+    "A2": "［연습 2 모범 풀이 슬롯］",
+    "GRAPHQ": "［그래프 문항 슬롯］ 좌표평면에 그래프를 그리는 문항을 입력합니다.",
+    "GRAPHANS": "<!-- ［교사 예시 그래프 슬롯 — polyline·path 등 SVG 요소로 입력］ -->",
+    "GRAPHCAP": "좌표평면에 그래프를 그려 보자.",
+    "ESSAYQ": "［서술형 문항 슬롯］ 풀이 과정 또는 개념 설명을 요구하는 문항을 입력합니다.",
+    "EA": "［서술형 모범답안 슬롯］",
+    "RUBRIC1": "핵심 개념(정의·공식)을 자기 말로 설명할 수 있는가?",
+    "RUBRIC2": "예제와 같은 유형의 문제를 스스로 풀 수 있는가?",
+    "RUBRIC3": "풀이 과정을 기호를 사용해 정확히 쓸 수 있는가?"
+  },
+  "pages": [
+    [
+      {
+        "type": "header",
+        "html": "<div class=\"title-wrap\">\n    <span class=\"pill\">{{PILL}}</span>\n    <span class=\"corner-ref\">{{REF}}</span>\n    <div class=\"title-box\"><h1>{{TITLE}}</h1></div>\n    <div class=\"unit-line\">\n      <div class=\"unit\"><b>단원</b>　{{UNIT}}</div>\n      <div class=\"namefield\">학년<span></span> 반<span></span> 이름<span></span></div>\n    </div>\n  </div>"
+      },
+      {
+        "type": "standard-label",
+        "gen": "standard-label"
+      },
+      {
+        "type": "directive",
+        "html": "<div class=\"direct\">{{DIRECTIVE}}</div>"
+      },
+      {
+        "type": "subq",
+        "html": "<p class=\"subq\"><span class=\"qnum\">1</span>핵심 개념을 확인해 보자.</p>"
+      },
+      {
+        "type": "resource-box",
+        "html": "<div class=\"qbox\">\n    <span class=\"lab\">핵심 개념</span>\n    <div>{{CONCEPT}}</div>\n  </div>"
+      },
+      {
+        "type": "subq",
+        "html": "<p class=\"subq\"><span class=\"qnum\">2</span>예제의 풀이 과정을 따라가 보자.</p>"
+      },
+      {
+        "type": "example-strip",
+        "html": "<div class=\"strip\"><div class=\"sh\">예제</div>\n    <div class=\"sb\"><p>{{EXAMPLE}}</p><p style=\"margin-top:2mm;\"><b>풀이</b>　{{SOLUTION}}</p></div>\n  </div>"
+      },
+      {
+        "type": "subq",
+        "html": "<p class=\"subq\"><span class=\"qnum\">3</span>예제와 같은 방법으로 풀어 보자.</p>"
+      },
+      {
+        "type": "question",
+        "html": "<div class=\"q\">{{TWINQ}}</div>"
+      },
+      {
+        "type": "step-blank",
+        "html": "<div class=\"stepfill keep\">\n    <div class=\"sf-head\">풀이 단계 채우기</div>\n    <ol>\n      <li>{{ST1}}　<span class=\"sf-blank\"><span class=\"answer\">{{SA1}}</span></span></li>\n      <li>{{ST2}}　<span class=\"sf-blank\"><span class=\"answer\">{{SA2}}</span></span></li>\n      <li>{{ST3}}　<span class=\"sf-blank\"><span class=\"answer\">{{SA3}}</span></span></li>\n    </ol>\n  </div>"
+      },
+      {
+        "type": "subq",
+        "html": "<p class=\"subq\"><span class=\"qnum\">4</span>연습 문제를 풀어 보자.</p>"
+      },
+      {
+        "type": "question",
+        "html": "<div class=\"q\">(1) {{P1}}</div>"
+      },
+      {
+        "type": "work-space",
+        "html": "<div class=\"workspace keep\">\n    <span class=\"ws-lab\">풀이</span>\n    <div class=\"ws-body\"><span class=\"answer\">{{A1}}</span></div>\n  </div>"
+      },
+      {
+        "type": "question",
+        "html": "<div class=\"q\">(2) {{P2}}</div>"
+      },
+      {
+        "type": "work-space",
+        "html": "<div class=\"workspace keep\">\n    <span class=\"ws-lab\">풀이</span>\n    <div class=\"ws-body\"><span class=\"answer\">{{A2}}</span></div>\n  </div>"
+      },
+      {
+        "type": "subq",
+        "html": "<p class=\"subq\"><span class=\"qnum\">5</span>그래프로 나타내 보자.</p>"
+      },
+      {
+        "type": "question",
+        "html": "<div class=\"q\">{{GRAPHQ}}</div>"
+      },
+      {
+        "type": "coordinate-plane",
+        "html": "<div class=\"graphwrap keep\">\n    <svg width=\"300\" height=\"290\" viewBox=\"0 0 300 290\" style=\"max-width:100%\" xmlns=\"http://www.w3.org/2000/svg\">\n      <rect x=\"0\" y=\"0\" width=\"300\" height=\"290\" fill=\"#ffffff\"/>\n      <g stroke=\"#e2e5ea\" stroke-width=\"1\"><line x1=\"30\" y1=\"20\" x2=\"30\" y2=\"260\"/><line x1=\"30\" y1=\"260\" x2=\"270\" y2=\"260\"/><line x1=\"54\" y1=\"20\" x2=\"54\" y2=\"260\"/><line x1=\"30\" y1=\"236\" x2=\"270\" y2=\"236\"/><line x1=\"78\" y1=\"20\" x2=\"78\" y2=\"260\"/><line x1=\"30\" y1=\"212\" x2=\"270\" y2=\"212\"/><line x1=\"102\" y1=\"20\" x2=\"102\" y2=\"260\"/><line x1=\"30\" y1=\"188\" x2=\"270\" y2=\"188\"/><line x1=\"126\" y1=\"20\" x2=\"126\" y2=\"260\"/><line x1=\"30\" y1=\"164\" x2=\"270\" y2=\"164\"/><line x1=\"150\" y1=\"20\" x2=\"150\" y2=\"260\"/><line x1=\"30\" y1=\"140\" x2=\"270\" y2=\"140\"/><line x1=\"174\" y1=\"20\" x2=\"174\" y2=\"260\"/><line x1=\"30\" y1=\"116\" x2=\"270\" y2=\"116\"/><line x1=\"198\" y1=\"20\" x2=\"198\" y2=\"260\"/><line x1=\"30\" y1=\"92\" x2=\"270\" y2=\"92\"/><line x1=\"222\" y1=\"20\" x2=\"222\" y2=\"260\"/><line x1=\"30\" y1=\"68\" x2=\"270\" y2=\"68\"/><line x1=\"246\" y1=\"20\" x2=\"246\" y2=\"260\"/><line x1=\"30\" y1=\"44\" x2=\"270\" y2=\"44\"/><line x1=\"270\" y1=\"20\" x2=\"270\" y2=\"260\"/><line x1=\"30\" y1=\"20\" x2=\"270\" y2=\"20\"/></g>\n      <line x1=\"22\" y1=\"140\" x2=\"282\" y2=\"140\" stroke=\"#333\" stroke-width=\"1.6\"/>\n      <line x1=\"150\" y1=\"268\" x2=\"150\" y2=\"8\" stroke=\"#333\" stroke-width=\"1.6\"/>\n      <path d=\"M 282 140 l -7 -3.5 v 7 z\" fill=\"#333\"/>\n      <path d=\"M 150 8 l -3.5 7 h 7 z\" fill=\"#333\"/>\n      <g font-size=\"8.5\" fill=\"#666\" font-family=\"Pretendard,sans-serif\"><text x=\"30\" y=\"151\" text-anchor=\"middle\">-5</text><text x=\"145\" y=\"263\" text-anchor=\"end\">-5</text><text x=\"54\" y=\"151\" text-anchor=\"middle\">-4</text><text x=\"145\" y=\"239\" text-anchor=\"end\">-4</text><text x=\"78\" y=\"151\" text-anchor=\"middle\">-3</text><text x=\"145\" y=\"215\" text-anchor=\"end\">-3</text><text x=\"102\" y=\"151\" text-anchor=\"middle\">-2</text><text x=\"145\" y=\"191\" text-anchor=\"end\">-2</text><text x=\"126\" y=\"151\" text-anchor=\"middle\">-1</text><text x=\"145\" y=\"167\" text-anchor=\"end\">-1</text><text x=\"174\" y=\"151\" text-anchor=\"middle\">1</text><text x=\"145\" y=\"119\" text-anchor=\"end\">1</text><text x=\"198\" y=\"151\" text-anchor=\"middle\">2</text><text x=\"145\" y=\"95\" text-anchor=\"end\">2</text><text x=\"222\" y=\"151\" text-anchor=\"middle\">3</text><text x=\"145\" y=\"71\" text-anchor=\"end\">3</text><text x=\"246\" y=\"151\" text-anchor=\"middle\">4</text><text x=\"145\" y=\"47\" text-anchor=\"end\">4</text><text x=\"270\" y=\"151\" text-anchor=\"middle\">5</text><text x=\"145\" y=\"23\" text-anchor=\"end\">5</text></g>\n      <g font-size=\"11\" fill=\"#333\" font-family=\"Pretendard,sans-serif\" font-style=\"italic\">\n        <text x=\"285\" y=\"144\">x</text><text x=\"156\" y=\"6\">y</text><text x=\"142\" y=\"152\">O</text>\n      </g>\n      <g class=\"plot-ans\" stroke=\"#1a5fb4\" stroke-width=\"2\" fill=\"none\">{{GRAPHANS}}</g>\n    </svg>\n    <div class=\"gcap\">{{GRAPHCAP}}</div>\n  </div>"
+      }
+    ],
+    [
+      {
+        "type": "subq",
+        "html": "<p class=\"subq\"><span class=\"qnum\">6</span>풀이 과정을 설명해 보자.</p>"
+      },
+      {
+        "type": "question",
+        "html": "<div class=\"q\">{{ESSAYQ}}</div>"
+      },
+      {
+        "type": "content",
+        "html": "<div class=\"answer\">{{EA}}</div>"
+      },
+      {
+        "type": "answer-line",
+        "html": "<div class=\"ans-line\"></div><div class=\"ans-line\"></div><div class=\"ans-line\"></div>"
+      },
+      {
+        "type": "section-heading",
+        "html": "<h2 class=\"sec\"><span class=\"n\">7</span>점검표를 작성하며 배움을 정리해 보자.</h2>"
+      },
+      {
+        "type": "rubric",
+        "html": "<table class=\"rubric\">\n    <tr><th>점검 요소</th><th style=\"width:22%\">점검 결과</th></tr>\n    <tr><td>{{RUBRIC1}}</td><td class=\"stars\">☆☆☆☆☆</td></tr>\n    <tr><td>{{RUBRIC2}}</td><td class=\"stars\">☆☆☆☆☆</td></tr>\n    <tr><td>{{RUBRIC3}}</td><td class=\"stars\">☆☆☆☆☆</td></tr>\n  </table>"
+      },
+      {
+        "type": "note",
+        "html": "<p style=\"margin:4mm 0 0;font-size:9pt;\">• 오늘 새롭게 알게 된 것, 더 연습하고 싶은 것을 적어 보자.</p>\n  <div class=\"note-under\"></div><div class=\"note-under\"></div>"
+      }
+    ]
+  ]
+}

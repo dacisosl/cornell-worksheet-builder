@@ -24,6 +24,8 @@ import {
   normalizePlan,
   type GrabPlan,
 } from './grabBridge';
+import { AUTHOR_SYSTEM, applyAuthored, buildAuthorPrompt } from './grabAuthor';
+import type { ComposeResult, GrabManifest } from './grabRuntime';
 import type { Store } from '../state/store';
 import { $, el } from '../utils/dom';
 import { Icons } from '../utils/icons';
@@ -40,6 +42,7 @@ export function createGrabPanel(ctx: GrabPanelContext) {
   const { store, syncFromDOM, safeTitle } = ctx;
   let settings: AiSettings = loadSettings();
   let plan: GrabPlan | null = null;
+  let built: BuiltWorksheet | null = null;
   let busy = false;
   let overlay: HTMLElement | null = null;
 
@@ -185,6 +188,7 @@ export function createGrabPanel(ctx: GrabPanelContext) {
 
   let statusEl!: HTMLElement;
   let runBtn!: HTMLButtonElement;
+  let promptBtn!: HTMLButtonElement;
   let resultEl!: HTMLElement;
   let askInput!: HTMLTextAreaElement;
 
@@ -200,7 +204,9 @@ export function createGrabPanel(ctx: GrabPanelContext) {
   function refreshRunState(withHint = true): void {
     const hasKey = !!activeKey(settings);
     const hasBlocks = store.state.blocks.length > 0;
-    runBtn.disabled = busy || !hasKey || !hasBlocks;
+    const blocked = busy || !hasKey || !hasBlocks;
+    runBtn.disabled = blocked;
+    promptBtn.disabled = blocked;
     if (!withHint) return;
     if (!hasBlocks) setStatus('먼저 빌더에서 학습지를 1차로 만들어 주세요.');
     else if (!hasKey) setStatus(`${PROVIDER_LABEL[settings.provider]} API 키를 넣으면 분석할 수 있어요.`);
@@ -291,6 +297,187 @@ export function createGrabPanel(ctx: GrabPanelContext) {
     ].filter(Boolean) as HTMLElement[]);
   }
 
+  /** 빌더 안에서 완성한 결과 */
+  interface BuiltWorksheet {
+    manifest: GrabManifest;
+    student: string;
+    teacher: string;
+    filled: number;
+    skipped: number;
+    leak: boolean;
+    findings: string[];
+  }
+
+  /** 학생용/교사용 HTML을 새 창에서 연다 (인쇄로 PDF 저장). */
+  function openHtml(html: string, label: string): void {
+    const w = window.open('', '_blank');
+    if (!w) {
+      setStatus('팝업이 막혀 있어요. 브라우저에서 팝업을 허용하거나 HTML을 내려받아 여세요.', true);
+      return;
+    }
+    w.document.open();
+    w.document.write(html);
+    w.document.close();
+    w.document.title = `${safeTitle()}_${label}`;
+  }
+
+  function renderBuilt(b: BuiltWorksheet): HTMLElement {
+    const frame = el('iframe', { class: 'gp-preview', title: '학생용 미리보기' }) as HTMLIFrameElement;
+    // srcdoc 은 별도 문서라 빌더 CSS와 섞이지 않는다.
+    frame.srcdoc = b.student;
+
+    const tab = (label: string, html: string, on = false) =>
+      el('button', {
+        class: 'gp-tab' + (on ? ' on' : ''),
+        text: label,
+        onclick: (e: Event) => {
+          const bar = (e.target as HTMLElement).parentElement;
+          [...(bar?.children ?? [])].forEach((c) => c.classList.remove('on'));
+          (e.target as HTMLElement).classList.add('on');
+          frame.srcdoc = html;
+        },
+      });
+
+    return el('div', { class: 'gp-result' }, [
+      section('완성된 활동지', [
+        el('div', { class: 'gp-chips' }, [
+          chip(`블록 ${b.filled}칸 저작`),
+          b.skipped ? chip(`${b.skipped}칸은 뼈대 유지`) : null,
+          b.leak ? chip('정답 누출 경고') : chip('정답 분리 확인'),
+        ].filter(Boolean) as HTMLElement[]),
+        b.findings.length
+          ? el('ul', { class: 'gp-ul' }, b.findings.slice(0, 6).map((f) => el('li', { text: f })))
+          : null,
+        el('div', { class: 'gp-tabs' }, [tab('학생용', b.student, true), tab('교사용', b.teacher)]),
+        frame,
+        el('div', { class: 'gp-actions' }, [
+          el('button', {
+            class: 'gp-btn primary',
+            text: '학생용 열기 · 인쇄',
+            onclick: () => openHtml(b.student, '학생용'),
+          }),
+          el('button', {
+            class: 'gp-btn ghost',
+            text: '교사용 열기 · 인쇄',
+            onclick: () => openHtml(b.teacher, '교사용'),
+          }),
+          el('button', {
+            class: 'gp-btn ghost',
+            text: '학생용 HTML 저장',
+            onclick: () => download(`${safeTitle()}-student.html`, b.student, 'text/html'),
+          }),
+          el('button', {
+            class: 'gp-btn ghost',
+            text: '교사용 HTML 저장',
+            onclick: () => download(`${safeTitle()}-teacher.html`, b.teacher, 'text/html'),
+          }),
+          el('button', {
+            class: 'gp-btn ghost',
+            text: '매니페스트 저장',
+            onclick: () =>
+              download(
+                `${safeTitle()}.manifest.json`,
+                JSON.stringify(b.manifest, null, 2),
+                'application/json',
+              ),
+          }),
+        ]),
+        el('p', {
+          class: 'gp-hint',
+          html:
+            '열린 창에서 <b>Ctrl+P</b> 로 A4 PDF로 저장합니다. 매니페스트를 저장해 두면 ' +
+            'worksheet-grab 의 <code>edit</code>·<code>doc</code> 명령으로 이어서 다듬을 수 있어요.',
+        }),
+      ]),
+    ]);
+  }
+
+  /** 분석 → 구조 조립 → 본문 저작 → 검수 → 2벌. 전 과정을 빌더 안에서 끝낸다. */
+  async function runFull(): Promise<void> {
+    if (busy) return;
+    syncFromDOM();
+    store.save();
+    busy = true;
+    refreshRunState(false);
+    resultEl.innerHTML = '';
+    built = null;
+
+    try {
+      // 1) 초안 분석
+      setStatus('1/4 초안을 분석하는 중…');
+      const analyzed = await analyze();
+      plan = analyzed;
+
+      // 2) 활동 구조 — 벤더 엔진이 결정적으로 만든다 (성취기준도 여기서 조회)
+      // 엔진·블록 라이브러리·성취기준은 이 기능을 쓸 때만 내려받는다(첫 화면을 가볍게).
+      setStatus('2/4 활동 구조를 짜고 성취기준을 찾는 중…');
+      const engine = await import('./grabRuntime');
+      const composed: ComposeResult = await engine.compose({
+        grade: analyzed.gradeBand || '중2',
+        subject: analyzed.subjectLabel || '과학',
+        topic: analyzed.topic || store.state.meta.title || '활동',
+        archetype: analyzed.archetype || null,
+        objectives: analyzed.objectives,
+      });
+
+      // 3) 본문 저작
+      setStatus('3/4 초안 내용을 살려 본문을 채우는 중…');
+      const authoredText = await complete(settings, {
+        system: AUTHOR_SYSTEM,
+        user: buildAuthorPrompt(composed, buildDigest(store.state), analyzed.objectives, askInput.value),
+        json: true,
+      });
+      let authored: { blocks?: { i?: number; html?: string }[] };
+      try {
+        authored = parseJsonLoose(authoredText);
+      } catch {
+        throw new Error('본문 저작 결과가 JSON이 아니었습니다. 다른 모델로 다시 시도해 보세요.');
+      }
+      const { manifest, filled, skipped } = applyAuthored(composed.manifest, authored);
+
+      // 4) 조립 · 검수 · 2벌
+      setStatus('4/4 활동지를 조립하고 검수하는 중…');
+      const html = await engine.assemble(manifest);
+      const check = await engine.validate(html);
+      const { student, teacher } = engine.variants(html);
+
+      const findings = check.findings
+        .map((f) => String(f.message ?? JSON.stringify(f)))
+        .filter(Boolean);
+
+      built = { manifest, student, teacher, filled, skipped, leak: !check.ok, findings };
+      resultEl.appendChild(renderBuilt(built));
+      resultEl.appendChild(renderResult(analyzed));
+      setStatus(
+        check.ok
+          ? '완성했어요. 학생용·교사용을 확인하고 인쇄하세요.'
+          : '완성했지만 검수 경고가 있어요. 교사용을 확인한 뒤 배포하세요.',
+        !check.ok,
+      );
+    } catch (err) {
+      setStatus(`완성 실패: ${(err as Error).message}`, true);
+    } finally {
+      busy = false;
+      refreshRunState(false);
+    }
+  }
+
+  /** 1차 초안을 분석해 교과·주제·구조를 뽑는다. */
+  async function analyze(): Promise<GrabPlan> {
+    const text = await complete(settings, {
+      system: SYSTEM_PROMPT,
+      user: buildUserPrompt(store.state, askInput.value),
+      json: true,
+    });
+    let parsed: unknown;
+    try {
+      parsed = parseJsonLoose(text);
+    } catch {
+      throw new Error('모델이 JSON 형식으로 답하지 않았습니다. 다른 모델로 다시 시도해 보세요.');
+    }
+    return normalizePlan(parsed);
+  }
+
   async function run(): Promise<void> {
     if (busy) return;
     syncFromDOM();
@@ -300,18 +487,7 @@ export function createGrabPanel(ctx: GrabPanelContext) {
     setStatus(`${PROVIDER_LABEL[settings.provider]} 로 초안을 분석하는 중…`);
     resultEl.innerHTML = '';
     try {
-      const text = await complete(settings, {
-        system: SYSTEM_PROMPT,
-        user: buildUserPrompt(store.state, askInput.value),
-        json: true,
-      });
-      let parsed: unknown;
-      try {
-        parsed = parseJsonLoose(text);
-      } catch {
-        throw new Error('모델이 JSON 형식으로 답하지 않았습니다. 다른 모델로 다시 시도해 보세요.');
-      }
-      plan = normalizePlan(parsed);
+      plan = await analyze();
       resultEl.appendChild(renderResult(plan));
       setStatus('요청문이 준비됐어요.');
     } catch (err) {
@@ -352,7 +528,15 @@ export function createGrabPanel(ctx: GrabPanelContext) {
 
     runBtn = el('button', {
       class: 'gp-btn primary big',
-      html: Icons.spark + '<span>초안 분석 → 요청문 만들기</span>',
+      html: Icons.spark + '<span>이 자리에서 완성하기</span>',
+      title: '분석 → 활동 구조 → 본문 저작 → 검수 → 학생용·교사용 2벌까지 빌더 안에서 끝냅니다',
+      onclick: () => void runFull(),
+    }) as HTMLButtonElement;
+
+    promptBtn = el('button', {
+      class: 'gp-btn ghost',
+      text: '요청문만 만들기',
+      title: 'worksheet-grab CLI(PDF·워크스페이스)까지 쓰고 싶을 때 붙여넣을 요청문을 만듭니다',
       onclick: () => void run(),
     }) as HTMLButtonElement;
 
@@ -377,14 +561,16 @@ export function createGrabPanel(ctx: GrabPanelContext) {
           el('h3', { text: '워크시트그랩으로 완성' }),
           el('p', {
             class: 'gp-sub',
-            text: '빌더로 만든 1차 초안을 AI가 분석해, worksheet-grab에 그대로 넣을 요청문을 만듭니다.',
+            text:
+              '빌더로 만든 1차 초안을 AI가 분석하고, 내장된 worksheet-grab 엔진이 활동 구조를 짭니다. ' +
+              '본문을 채워 학생용·교사용 2벌까지 이 자리에서 만듭니다.',
           }),
         ]),
         el('button', { class: 'gp-x', html: '&times;', title: '닫기', onclick: close }),
       ]),
       buildSettings(),
       field('덧붙일 요청 (선택)', askInput),
-      el('div', { class: 'gp-actions' }, [runBtn, digestBtn]),
+      el('div', { class: 'gp-actions' }, [runBtn, promptBtn, digestBtn]),
       digest,
       statusEl,
       resultEl,
@@ -399,6 +585,7 @@ export function createGrabPanel(ctx: GrabPanelContext) {
 
     document.body.appendChild(overlay);
     refreshRunState();
+    if (built) resultEl.appendChild(renderBuilt(built));
     if (plan) resultEl.appendChild(renderResult(plan));
   }
 
