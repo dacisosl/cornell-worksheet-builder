@@ -7,7 +7,7 @@ import {
   STORE_KEY,
   noteScaleOf,
 } from '../constants';
-import type { AppMeta, AppState, Block, BlockType, ImageSelection } from '../types';
+import type { AppMeta, AppState, Block, BlockType, ImageBlock, ImageSelection } from '../types';
 import { debounce } from '../utils/dom';
 
 function cloneState<T>(v: T): T {
@@ -74,9 +74,10 @@ function migrateLegacy(raw: unknown): AppState | null {
         : [];
     }
     if (block.type === 'image') {
-      const img = block as unknown as { width?: unknown; titleHidden?: unknown };
+      const img = block as unknown as { width?: unknown; titleHidden?: unknown; html?: unknown };
       if (img.width !== 'half' && img.width !== 'full') img.width = 'full';
       if (typeof img.titleHidden !== 'boolean') img.titleHidden = true;
+      if (typeof img.html !== 'string') img.html = '';
     }
     return block;
   });
@@ -113,7 +114,10 @@ export class Store {
   state: AppState;
   seq: number;
   imgSeq: number;
+  /** 기준(마지막으로 누른) 이미지 */
   selected: ImageSelection | null = null;
+  /** 함께 고른 이미지 id 목록 — 항상 selected.b 블록 안의 이미지들 */
+  selectedIds: number[] = [];
   private seeded: boolean;
 
   private history: AppState[] = [];
@@ -199,7 +203,7 @@ export class Store {
           Math.max(m, 'imgs' in b ? (b.imgs ?? []).reduce((mm, im) => Math.max(mm, im.id), 0) : 0),
         0,
       ) + 1;
-    this.selected = null;
+    this.clearSelection();
     this.save();
     return true;
   }
@@ -216,7 +220,7 @@ export class Store {
           Math.max(m, 'imgs' in b ? (b.imgs ?? []).reduce((mm, im) => Math.max(mm, im.id), 0) : 0),
         0,
       ) + 1;
-    this.selected = null;
+    this.clearSelection();
     this.save();
     return true;
   }
@@ -230,7 +234,7 @@ export class Store {
     };
     this.seq = 1;
     this.imgSeq = 1;
-    this.selected = null;
+    this.clearSelection();
     this.commit();
   }
 
@@ -254,7 +258,7 @@ export class Store {
             ),
           0,
         ) + 1;
-      this.selected = null;
+      this.clearSelection();
       this.commit();
       return true;
     } catch {
@@ -292,6 +296,39 @@ export class Store {
 
   findBlock(id: number): Block | undefined {
     return this.state.blocks.find((b) => b.id === id);
+  }
+
+  /** 이미지 선택을 지운다. */
+  clearSelection(): void {
+    this.selected = null;
+    this.selectedIds = [];
+  }
+
+  /** 한 칸 안에서 고를 이미지들을 지정한다 (마지막 id가 기준). */
+  setSelection(blockId: number, ids: number[]): void {
+    const uniq = [...new Set(ids)];
+    if (!uniq.length) {
+      this.clearSelection();
+      return;
+    }
+    this.selectedIds = uniq;
+    this.selected = { b: blockId, i: uniq[uniq.length - 1] };
+  }
+
+  isImgSelected(blockId: number, imgId: number): boolean {
+    return this.selected?.b === blockId && this.selectedIds.includes(imgId);
+  }
+
+  /** 아직 쓰지 않은 그룹 번호 */
+  nextGroupId(): number {
+    let max = 0;
+    this.state.blocks.forEach((b) => {
+      if (!('imgs' in b)) return;
+      ((b as ImageBlock).imgs ?? []).forEach((im) => {
+        if (typeof im.g === 'number') max = Math.max(max, im.g);
+      });
+    });
+    return max + 1;
   }
 
   seedDemoBlocks(makeBlock: (type: BlockType) => Block): void {

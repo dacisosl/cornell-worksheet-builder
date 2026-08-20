@@ -630,14 +630,8 @@ button { font-family: inherit; cursor: pointer; }
 .field img { max-width: 100%; height: auto; }
 
 /* 이미지 전용 블록: 텍스트/캐럿 없이 드롭/붙여넣기만 받는 영역 */
-.imgonly-drop {
-  flex: 1;
-  min-height: 0;
-  width: 100%;
-  z-index: 1;
-  outline: none;
-  background: transparent;
-}
+/* 이미지 전용 블록의 텍스트 칸 — 줄 간격을 본문보다 촘촘하게 */
+.field.f-main { line-height: 26px; padding: 10px 12px; }
 
 
 .vdiv {
@@ -754,12 +748,15 @@ button { font-family: inherit; cursor: pointer; }
   box-shadow: 0 1px 3px rgba(40,38,32,.18); background: #fff;
 }
 .imgobj.selected img { box-shadow: 0 0 0 1.5px var(--accent), 0 2px 8px rgba(40,38,32,.18); }
+/* 함께 고른(그룹) 이미지는 기준 이미지보다 옅게 표시 */
+.imgobj.selected:not(.primary) img { box-shadow: 0 0 0 1.5px rgba(46,75,115,.5), 0 2px 8px rgba(40,38,32,.14); }
+/* 크기 조절 손잡이·도구막대는 기준 이미지에만 붙는다 */
 .ihandle {
   position: absolute; width: 13px; height: 13px;
   background: #fff; border: 1.5px solid var(--accent);
   border-radius: 3px; display: none; z-index: 2;
 }
-.imgobj.selected .ihandle { display: block; }
+.imgobj.selected.primary .ihandle { display: block; }
 .ihandle.nw { left: -7px; top: -7px; cursor: nwse-resize; }
 .ihandle.ne { right: -7px; top: -7px; cursor: nesw-resize; }
 .ihandle.sw { left: -7px; bottom: -7px; cursor: nesw-resize; }
@@ -770,7 +767,7 @@ button { font-family: inherit; cursor: pointer; }
   border-radius: 9px; padding: 3px; box-shadow: var(--shadow-card);
   white-space: nowrap; z-index: 3;
 }
-.imgobj.selected .img-tb { display: flex; }
+.imgobj.selected.primary .img-tb { display: flex; }
 .tbb {
   min-width: 27px; height: 27px; border: none; background: transparent;
   border-radius: 6px; color: var(--ink-soft); font-size: 16px; font-weight: 600;
@@ -778,8 +775,17 @@ button { font-family: inherit; cursor: pointer; }
 }
 .tbb:hover { background: var(--panel-2); color: var(--accent); }
 .tbb.on { background: var(--accent-soft); color: var(--accent); }
+/* 그룹 버튼: 여러 장을 골랐을 때 / 그룹으로 묶였을 때만 */
+.img-layer:not(.multi-sel) .tbb.only-multi { display: none; }
+.imgobj:not(.grouped) .tbb.only-grouped { display: none; }
+.imgobj.grouped .tbb.only-multi { display: none; }
 .tbb.danger:hover { background: #fbeaea; color: var(--accent-2); }
 .tbb svg { width: 15px; height: 15px; }
+/* 그룹으로 묶인 이미지 표시 (편집 중에만) */
+.imgobj.grouped::after {
+  content: ""; position: absolute; inset: -3px; border-radius: 5px;
+  border: 1px dashed rgba(46,75,115,.45); pointer-events: none;
+}
 .galign { position: absolute; background: var(--accent-2); pointer-events: none; z-index: 7; opacity: .85; }
 .galign.v { width: 1px; top: 0; bottom: 0; }
 .galign.h { height: 1px; left: 0; right: 0; }
@@ -946,6 +952,10 @@ button { font-family: inherit; cursor: pointer; }
   content: ""; width: 38px; height: 4px; border-radius: 3px;
   background: var(--ink-faint); opacity: .35; transition: opacity .12s, background .12s;
 }
+/* 더 줄일 수 없을 때 — 이미지가 칸을 벗어나는 지점 */
+.block.resize-blocked .resize-h::after { background: var(--accent-2); opacity: 1; }
+.vdiv.resize-blocked::before,
+.hdiv.adjustable.resize-blocked::before { background: var(--accent-2); }
 .resize-h:hover { cursor: grab; }
 .resize-h.dragging { cursor: grabbing; }
 .block:hover .resize-h::after { opacity: .6; }
@@ -978,6 +988,9 @@ button { font-family: inherit; cursor: pointer; }
   font-variant-numeric: tabular-nums; opacity: 0; transition: opacity .12s;
 }
 .block:hover .size-badge { opacity: 1; }
+/* 이미지 때문에 더 줄일 수 없을 때 이유를 알려 준다 */
+.block.resize-blocked .size-badge { opacity: 1; color: var(--accent-2); font-weight: 700; }
+.block.resize-blocked .size-badge::after { content: " · 이미지 때문에 여기까지"; }
 
 @media print {
   @page {
@@ -1111,6 +1124,8 @@ button { font-family: inherit; cursor: pointer; }
   .bhead.compact,
   .field-tools,
   .galign { display: none !important; }
+
+  .imgobj.grouped::after { display: none !important; }
 
   /* 제목행을 숨긴 블록은 인쇄에서도 테두리가 없다 */
   .block.headless { border-color: transparent !important; background: transparent !important; }

@@ -46,6 +46,7 @@ export function makeBlock(store: Store, type: BlockType): Block {
       ...base,
       type: 'image',
       imgs: [],
+      html: '',
       titleHidden: true,
       width: 'full',
     } satisfies ImageOnlyBlock;

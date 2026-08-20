@@ -91,6 +91,8 @@ export function createApp(root: HTMLElement) {
   const drawTbHost = el('div', { class: 'draw-tb-host', id: 'drawTbHost' });
   let panelRegs: PanelReg[] = [];
   let activeReg: PanelReg | null = null;
+  /** 사용자가 마지막으로 고른 칸 — 다시 그린 뒤에도 그 칸을 계속 기준으로 삼는다. */
+  let pickedPanel: { blockId: number; key: string } | null = null;
 
   function resetPanels(): void {
     panelRegs = [];
@@ -98,7 +100,8 @@ export function createApp(root: HTMLElement) {
     drawTbHost.innerHTML = '';
   }
 
-  function setActivePanel(reg: PanelReg): void {
+  function setActivePanel(reg: PanelReg, fromUser = true): void {
+    if (fromUser) pickedPanel = { blockId: reg.block.id, key: reg.key };
     if (activeReg === reg) return;
     activeReg = reg;
     panelRegs.forEach((r) => r.panel.classList.toggle('panel-active', r === reg));
@@ -113,7 +116,21 @@ export function createApp(root: HTMLElement) {
     const activate = (): void => setActivePanel(reg);
     info.panel.addEventListener('pointerdown', activate);
     info.panel.addEventListener('focusin', activate);
-    if (!activeReg) setActivePanel(reg);
+
+    // 다시 그린 뒤에도 고르고 있던 칸을 되살린다.
+    // (key가 빈 문자열이면 "그 블록의 첫 칸"을 뜻한다 — 새로 만든 블록)
+    const wanted =
+      pickedPanel?.blockId === info.block.id &&
+      (pickedPanel.key === '' || pickedPanel.key === info.key);
+
+    if (wanted) {
+      pickedPanel = { blockId: info.block.id, key: info.key };
+      activeReg = reg;
+      panelRegs.forEach((r) => r.panel.classList.toggle('panel-active', r === reg));
+      refreshSideTools();
+    } else if (!activeReg) {
+      setActivePanel(reg, false);
+    }
   }
 
   renderer = createRenderer({
@@ -124,6 +141,11 @@ export function createApp(root: HTMLElement) {
     paginateSoon,
     registerPanel,
     resetPanels,
+    anchorBlockId: () => pickedPanel?.blockId ?? activeReg?.block.id ?? null,
+    setAnchorBlockId: (id: number) => {
+      // 새 블록의 첫 칸이 기준이 되도록, 블록만 기억하고 칸 키는 비워 둔다.
+      pickedPanel = { blockId: id, key: '' };
+    },
   });
 
   function setZoom(z: number): void {
@@ -373,7 +395,7 @@ export function createApp(root: HTMLElement) {
           paletteCard('problem', '문제풀이', '문제 · 풀이 가로 배열. 문제칸에 캡처를 Ctrl+V로 삽입. 기본 A4 ⅓.', thumbProblem()),
           paletteCard('concept', '개념설명', '개념 이름 · 설명 세로 배열. 줄글/격자, 연한 배경 선택.', thumbConcept()),
           paletteCard('mock', '모의고사', '가로 A4 ½ 폭 · 세로 2단. 문제 위, 긴 풀이 아래. 두 개가 나란히.', thumbMock()),
-          paletteCard('image', '이미지 전용', '텍스트 없이 이미지만 자유 배치. 높이·폭(½/전체) 조절 가능.', thumbImageOnly()),
+          paletteCard('image', '이미지 전용', '이미지를 자유 배치. 글도 함께 쓸 수 있고 높이·폭(½/전체) 조절 가능.', thumbImageOnly()),
           paletteCard('image', '이미지 전용 (반칸)', '가로 ½ 폭 이미지 블록. 두 개가 나란히 배치됩니다.', thumbImageHalf(), { width: 'half' }),
         ]),
       ]),
@@ -411,7 +433,12 @@ export function createApp(root: HTMLElement) {
         el('div', {
           class: 'side-note',
           style: 'margin-top:10px',
-          html: '<b>이미지</b> · 문제 칸에서 <b>Ctrl+V</b>로 캡처 붙여넣기. 드래그·리사이즈·화질 보정·정돈 버튼을 활용하세요.',
+          html: '<b>이미지</b> · 칸에서 <b>Ctrl+V</b>로 캡처 붙여넣기. <b>Shift+클릭</b>으로 여러 장을 함께 고르고 <b>그룹 묶기</b>를 하면 하나처럼 움직입니다.',
+        }),
+        el('div', {
+          class: 'side-note',
+          style: 'margin-top:10px',
+          html: '<b>새 블록</b> · 마지막으로 고른 칸 <b>바로 아래</b>에 생깁니다.',
         }),
       ]),
     );
@@ -487,6 +514,27 @@ export function createApp(root: HTMLElement) {
         '좌표평면',
         '격자·축이 있는 좌표평면 삽입',
         withImgBlock((b) => images.addCoordPlane(b)),
+        true,
+      ),
+      tool(
+        Icons.spread,
+        '겹침 정리',
+        '크기는 그대로, 서로 안 겹치게',
+        withImgBlock((b) => images.spreadImgs(b)),
+        true,
+      ),
+      tool(
+        Icons.group,
+        '그룹 묶기',
+        'Shift+클릭으로 고른 이미지를 하나처럼',
+        withImgBlock((b) => images.groupSelected(b)),
+        true,
+      ),
+      tool(
+        Icons.ungroup,
+        '그룹 해제',
+        '묶인 이미지를 다시 따로따로',
+        withImgBlock((b) => images.ungroupSelected(b)),
         true,
       ),
       tool(

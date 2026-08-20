@@ -10,6 +10,8 @@ export interface ImageObj {
   x: number;
   y: number;
   w: number;
+  /** 그룹 번호. 같은 번호끼리 함께 선택·이동·확대된다. */
+  g?: number | null;
 }
 
 /** 필기 획: 레이어 폭/높이 대비 비율 좌표 목록 */
@@ -88,6 +90,8 @@ export interface ImageOnlyBlock extends BlockBase {
   type: 'image';
   /** 가로 폭: 'full'(전체) | 'half'(반절) */
   width: 'full' | 'half';
+  /** 이미지 칸에 함께 넣는 텍스트 */
+  html: string;
   imgs: ImageObj[];
 }
 
@@ -132,6 +136,14 @@ export interface AppState {
 export interface ImageSelection {
   b: number;
   i: number;
+}
+
+/** 한 칸 안에서 여러 이미지를 함께 고른 상태 */
+export interface ImageMultiSelection {
+  /** 블록 id */
+  b: number;
+  /** 고른 이미지 id 목록 (마지막 항목이 기준 이미지) */
+  ids: number[];
 }
 
 export interface BlockDefaults {

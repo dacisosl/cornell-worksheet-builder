@@ -6,6 +6,12 @@ import type { Block, ImageBlock, ImageObj } from '../types';
 import { $, $$, el } from '../utils/dom';
 import { Icons } from '../utils/icons';
 
+/** 칸 크기 조절 중에 이미지를 제자리에 두기 위한 픽셀 좌표 스냅샷 */
+export interface ImgSnapshot {
+  layer: HTMLElement;
+  items: { im: ImageObj; left: number; top: number; w: number; h: number }[];
+}
+
 export interface ImageContext {
   store: Store;
   render: () => void;
@@ -32,26 +38,68 @@ export function createImageService(ctx: ImageContext) {
     return im.sharpened && im.sharpSrc ? im.sharpSrc : im.src;
   }
 
-  function selectImage(bId: number, iId: number): void {
-    store.selected = { b: bId, i: iId };
+  /** 같은 그룹에 묶인 이미지 id 목록 (그룹이 없으면 자기 자신만) */
+  function groupMates(imgs: ImageObj[], im: ImageObj): number[] {
+    if (im.g == null) return [im.id];
+    return imgs.filter((o) => o.g === im.g).map((o) => o.id);
+  }
+
+  /** 현재 고른 이미지 객체들 (기준 이미지가 마지막) */
+  function selectedObjs(block: ImageBlock): ImageObj[] {
+    if (store.selected?.b !== block.id) return [];
+    const imgs = block.imgs ?? [];
+    return store.selectedIds
+      .map((id) => imgs.find((o) => o.id === id))
+      .filter((o): o is ImageObj => !!o);
+  }
+
+  /**
+   * 이미지를 고른다.
+   * 그룹에 속한 이미지는 그룹 전체가 함께 선택되고,
+   * Shift/Ctrl을 누른 채 고르면 기존 선택에 더하거나 뺀다.
+   */
+  function selectImage(bId: number, iId: number, additive = false): void {
+    const b = store.findBlock(bId);
+    const imgs = b && hasImages(b) ? (b.imgs ?? []) : [];
+    const im = imgs.find((o) => o.id === iId);
+    const mates = im ? groupMates(imgs, im) : [iId];
+
+    let ids: number[];
+    if (additive && store.selected?.b === bId) {
+      const cur = store.selectedIds;
+      const alreadyIn = mates.every((id) => cur.includes(id));
+      const rest = cur.filter((id) => !mates.includes(id));
+      ids = alreadyIn ? rest : [...rest, ...mates];
+    } else {
+      ids = mates;
+    }
+    // 기준(마지막으로 누른) 이미지를 맨 뒤로
+    if (ids.includes(iId)) ids = [...ids.filter((x) => x !== iId), iId];
+
+    store.setSelection(bId, ids);
     $$('.img-layer').forEach(applySel);
   }
 
   function deselectImage(): void {
     if (!store.selected) return;
-    store.selected = null;
+    store.clearSelection();
     $$('.img-layer').forEach(applySel);
   }
 
   function applySel(layer: Element): void {
+    const bn = layer.closest('.block');
+    const multi =
+      !!bn && store.selected?.b === +bn.getAttribute('data-id')! && store.selectedIds.length > 1;
+    layer.classList.toggle('multi-sel', multi);
     $$('.imgobj', layer).forEach((o) => {
       const bn = o.closest('.block');
-      const sel =
-        store.selected &&
-        bn &&
-        +bn.getAttribute('data-id')! === store.selected.b &&
-        +o.getAttribute('data-img')! === store.selected.i;
+      const sel = bn && store.isImgSelected(+bn.getAttribute('data-id')!, +o.getAttribute('data-img')!);
       o.classList.toggle('selected', !!sel);
+      const prim =
+        bn &&
+        store.selected?.b === +bn.getAttribute('data-id')! &&
+        store.selected.i === +o.getAttribute('data-img')!;
+      o.classList.toggle('primary', !!prim);
     });
   }
 
@@ -158,8 +206,36 @@ export function createImageService(ctx: ImageContext) {
   }
 
   function delImg(block: ImageBlock, im: ImageObj): void {
-    block.imgs = (block.imgs ?? []).filter((o) => o.id !== im.id);
-    if (store.selected?.b === block.id && store.selected?.i === im.id) store.selected = null;
+    // 여러 개를 골랐으면 함께 지운다.
+    const sel = selectedObjs(block);
+    const kill = new Set(sel.some((o) => o.id === im.id) ? sel.map((o) => o.id) : [im.id]);
+    block.imgs = (block.imgs ?? []).filter((o) => !kill.has(o.id));
+    if (store.selected?.b === block.id) store.clearSelection();
+    store.commit();
+    reLayer(block);
+  }
+
+  /** 고른 이미지들을 한 그룹으로 묶는다. */
+  function groupSelected(block: ImageBlock): void {
+    const sel = selectedObjs(block);
+    if (sel.length < 2) return;
+    const g = store.nextGroupId();
+    sel.forEach((im) => {
+      im.g = g;
+    });
+    store.commit();
+    reLayer(block);
+  }
+
+  /** 고른 이미지들의 그룹을 푼다. */
+  function ungroupSelected(block: ImageBlock): void {
+    const sel = selectedObjs(block);
+    if (!sel.length) return;
+    const groups = new Set(sel.map((im) => im.g).filter((g): g is number => g != null));
+    if (!groups.size) return;
+    (block.imgs ?? []).forEach((im) => {
+      if (im.g != null && groups.has(im.g)) im.g = null;
+    });
     store.commit();
     reLayer(block);
   }
@@ -216,6 +292,114 @@ export function createImageService(ctx: ImageContext) {
     });
     store.commit();
     reLayer(block);
+  }
+
+  /**
+   * 겹침 정리: 지금 크기를 지키면서 서로 겹치지 않게 다시 배치한다.
+   * 위→아래, 왼→오른쪽 순서를 지켜 줄(row) 단위로 채우고,
+   * 칸 높이를 넘으면 전체를 같은 비율로 줄인다.
+   */
+  function spreadImgs(block: ImageBlock): void {
+    const imgs = block.imgs ?? [];
+    if (imgs.length < 2) return;
+    const layer = blockLayer(block.id);
+    if (!layer) return;
+    const pw = layer.clientWidth || 1;
+    const ph = layer.clientHeight || 1;
+    const pad = 8;
+    const gap = 10;
+    const avail = Math.max(20, pw - pad * 2);
+
+    const items = imgs
+      .map((im) => ({ im, w: im.w * pw, h: im.w * pw * im.ar, x: im.x * pw, y: im.y * ph }))
+      .sort((a, b) => a.y - b.y || a.x - b.x);
+
+    // 칸보다 넓은 이미지는 먼저 폭을 맞춘다.
+    items.forEach((it) => {
+      if (it.w > avail) {
+        it.h *= avail / it.w;
+        it.w = avail;
+      }
+    });
+
+    type Item = (typeof items)[number];
+    const rows: Item[][] = [];
+    let row: Item[] = [];
+    let rowW = 0;
+    items.forEach((it) => {
+      const add = row.length ? gap + it.w : it.w;
+      if (row.length && rowW + add > avail) {
+        rows.push(row);
+        row = [it];
+        rowW = it.w;
+      } else {
+        row.push(it);
+        rowW += add;
+      }
+    });
+    if (row.length) rows.push(row);
+
+    const rowH = rows.map((r) => Math.max(...r.map((i) => i.h)));
+    const gaps = gap * (rows.length - 1);
+    const stackH = rowH.reduce((a, b) => a + b, 0);
+    const room = ph - pad * 2 - gaps;
+    const scale = stackH > room ? Math.max(0.05, room / stackH) : 1;
+
+    let y = pad;
+    rows.forEach((r, ri) => {
+      const rowWidth = r.reduce((a, i) => a + i.w * scale, 0) + gap * (r.length - 1);
+      let x = Math.max(pad, (pw - rowWidth) / 2);
+      r.forEach((it) => {
+        it.im.w = (it.w * scale) / pw;
+        it.im.x = x / pw;
+        it.im.y = y / ph;
+        x += it.w * scale + gap;
+      });
+      y += rowH[ri] * scale + gap;
+    });
+
+    store.commit();
+    reLayer(block);
+  }
+
+  function snapshotImgs(block: ImageBlock): ImgSnapshot | null {
+    const layer = blockLayer(block.id);
+    if (!layer) return null;
+    const pw = layer.clientWidth || 1;
+    const ph = layer.clientHeight || 1;
+    return {
+      layer,
+      items: (block.imgs ?? []).map((im) => {
+        // 화면에 그려진 값이 있으면 그것을 쓴다 — 모델 값은 칸에 맞춰 보정되기 전일 수 있다.
+        const node = $(`.imgobj[data-img="${im.id}"]`, layer) as HTMLElement | null;
+        const w = node ? parseFloat(node.style.width) || im.w * pw : im.w * pw;
+        const left = node ? parseFloat(node.style.left) || 0 : im.x * pw;
+        const top = node ? parseFloat(node.style.top) || 0 : im.y * ph;
+        return { im, left, top, w, h: w * im.ar };
+      }),
+    };
+  }
+
+  /**
+   * 스냅샷의 픽셀 위치·크기를 그대로 유지한 채 바뀐 칸 크기에 맞춘다.
+   * 이미지가 칸을 벗어나면 아무것도 바꾸지 않고 false를 돌려준다.
+   */
+  function applySnapshot(snap: ImgSnapshot | null): boolean {
+    if (!snap || !snap.items.length) return true;
+    const pw = snap.layer.clientWidth || 1;
+    const ph = snap.layer.clientHeight || 1;
+    // clientWidth/Height는 정수라 1px 정도는 오차로 본다.
+    const SLACK = 1.5;
+    const fits = snap.items.every(
+      (it) => it.left + it.w <= pw + SLACK && it.top + it.h <= ph + SLACK,
+    );
+    if (!fits) return false;
+    snap.items.forEach((it) => {
+      it.im.w = it.w / pw;
+      it.im.x = it.left / pw;
+      it.im.y = it.top / ph;
+    });
+    return true;
   }
 
   /** 앱 내부 이미지 클립보드 — 시스템 클립보드가 막혀도 붙여넣기가 되도록 보관 */
@@ -456,10 +640,13 @@ export function createImageService(ctx: ImageContext) {
         store.commit();
         reLayer(block);
       }),
+      // 그룹 버튼은 상황에 맞을 때만 보인다 (CSS로 표시 제어)
+      mk(Icons.group, '고른 이미지 그룹으로 묶기', () => groupSelected(block), 'only-multi'),
+      mk(Icons.ungroup, '그룹 해제', () => ungroupSelected(block), 'only-grouped on'),
       mk(Icons.copy, '복사 (Ctrl+C) — 다른 칸에 Ctrl+V로 붙여넣기', () => void copyImage(im)),
       mk(Icons.crop, '이미지 자르기', () => startCrop(block, im, obj, layer)),
       mk(Icons.sharp, '화질 보정 켜기/끄기', () => toggleSharp(block, im), im.sharpened ? 'on' : ''),
-      mk(Icons.trash, '삭제', () => delImg(block, im), 'danger'),
+      mk(Icons.trash, '삭제 — 여럿을 골랐으면 함께 지웁니다', () => delImg(block, im), 'danger'),
     );
     return bar;
   }
@@ -723,7 +910,7 @@ export function createImageService(ctx: ImageContext) {
     pic.addEventListener('pointerdown', ((e: Event) => {
       const pe = e as PointerEvent;
       pe.preventDefault();
-      selectImage(block.id, im.id);
+      selectImage(block.id, im.id, pe.shiftKey || pe.ctrlKey || pe.metaKey);
       const z = store.getEffectiveScale();
       const pw = layer.clientWidth;
       const ph = layer.clientHeight;
@@ -733,12 +920,34 @@ export function createImageService(ctx: ImageContext) {
       const sy = pe.clientY;
       const startL = im.x * pw;
       const startT = im.y * ph;
-      const others = (block.imgs ?? [])
+
+      // 함께 고른(또는 그룹으로 묶인) 이미지들은 같은 거리만큼 움직인다.
+      const movers = selectedObjs(block)
         .filter((o) => o.id !== im.id)
+        .map((o) => {
+          const ow = o.w * pw;
+          return {
+            im: o,
+            node: $(`.imgobj[data-img="${o.id}"]`, layer) as HTMLElement | null,
+            left: o.x * pw,
+            top: o.y * ph,
+            w: ow,
+            h: ow * o.ar,
+          };
+        });
+      const moverIds = new Set([im.id, ...movers.map((m) => m.im.id)]);
+      const others = (block.imgs ?? [])
+        .filter((o) => !moverIds.has(o.id))
         .map((o) => {
           const ow = o.w * pw;
           return { left: o.x * pw, top: o.y * ph, w: ow, h: ow * o.ar };
         });
+
+      // 선택 묶음 전체가 칸을 벗어나지 않도록 이동 범위를 미리 구한다.
+      const minDx = Math.max(-startL, ...movers.map((m) => -m.left));
+      const maxDx = Math.min(pw - w - startL, ...movers.map((m) => pw - m.w - m.left));
+      const minDy = Math.max(-startT, ...movers.map((m) => -m.top));
+      const maxDy = Math.min(ph - h - startT, ...movers.map((m) => ph - m.h - m.top));
 
       obj.setPointerCapture(pe.pointerId);
       obj.classList.add('moving');
@@ -747,15 +956,31 @@ export function createImageService(ctx: ImageContext) {
         const p = ev as PointerEvent;
         let nl = startL + (p.clientX - sx) / z;
         let nt = startT + (p.clientY - sy) / z;
-        const g = snap(nl, nt, w, h, pw, ph, others, layer);
-        nl = g.left;
-        nt = g.top;
-        nl = Math.max(0, Math.min(nl, pw - w));
-        nt = Math.max(0, Math.min(nt, ph - h));
+        if (!movers.length) {
+          const g = snap(nl, nt, w, h, pw, ph, others, layer);
+          nl = g.left;
+          nt = g.top;
+        }
+        let dx = nl - startL;
+        let dy = nt - startT;
+        dx = Math.max(minDx, Math.min(maxDx, dx));
+        dy = Math.max(minDy, Math.min(maxDy, dy));
+        nl = startL + dx;
+        nt = startT + dy;
         obj.style.left = nl + 'px';
         obj.style.top = nt + 'px';
         im.x = nl / pw;
         im.y = nt / ph;
+        movers.forEach((m) => {
+          const ml = m.left + dx;
+          const mt = m.top + dy;
+          m.im.x = ml / pw;
+          m.im.y = mt / ph;
+          if (m.node) {
+            m.node.style.left = ml + 'px';
+            m.node.style.top = mt + 'px';
+          }
+        });
       };
 
       const up = () => {
@@ -787,7 +1012,7 @@ export function createImageService(ctx: ImageContext) {
         const pe = e as PointerEvent;
         pe.preventDefault();
         pe.stopPropagation();
-        selectImage(block.id, im.id);
+        selectImage(block.id, im.id, pe.shiftKey || pe.ctrlKey || pe.metaKey);
         const z = store.getEffectiveScale();
         const pw = layer.clientWidth;
         const ph = layer.clientHeight;
@@ -796,10 +1021,40 @@ export function createImageService(ctx: ImageContext) {
         const startH = startW * im.ar;
         const startL = im.x * pw;
         const startT = im.y * ph;
-        const anchorX = corner.includes('w') ? startL + startW : startL;
-        const anchorY = corner.includes('n') ? startT + startH : startT;
         const sx = pe.clientX;
         const dir = corner.includes('e') ? 1 : -1;
+
+        // 함께 고른 이미지들은 묶음 전체가 같은 비율로 커지고 작아진다.
+        const sel = selectedObjs(block);
+        const group =
+          sel.length > 1 && sel.some((o) => o.id === im.id)
+            ? sel.map((o) => {
+                const ow = o.w * pw;
+                return {
+                  im: o,
+                  node: $(`.imgobj[data-img="${o.id}"]`, layer) as HTMLElement | null,
+                  left: o.x * pw,
+                  top: o.y * ph,
+                  w: ow,
+                  h: ow * o.ar,
+                };
+              })
+            : [];
+
+        // 기준 상자: 혼자면 그 이미지, 묶음이면 전체를 감싸는 상자
+        const boxL = group.length ? Math.min(...group.map((g) => g.left)) : startL;
+        const boxT = group.length ? Math.min(...group.map((g) => g.top)) : startT;
+        const boxR = group.length ? Math.max(...group.map((g) => g.left + g.w)) : startL + startW;
+        const boxB = group.length ? Math.max(...group.map((g) => g.top + g.h)) : startT + startH;
+        const boxW = boxR - boxL;
+        const boxH = boxB - boxT;
+        const anchorX = corner.includes('w') ? boxR : boxL;
+        const anchorY = corner.includes('n') ? boxB : boxT;
+        // 묶음이 칸을 벗어나지 않는 최대 배율
+        const maxF = Math.min(
+          corner.includes('w') ? anchorX / boxW : (pw - anchorX) / boxW,
+          corner.includes('n') ? anchorY / boxH : (ph - anchorY) / boxH,
+        );
 
         hd.setPointerCapture(pe.pointerId);
         obj.classList.add('resizing');
@@ -807,22 +1062,42 @@ export function createImageService(ctx: ImageContext) {
         const mv = (ev: Event) => {
           const p = ev as PointerEvent;
           const dw = (p.clientX - sx) / z;
-          let nw = Math.max(40, Math.min(pw, startW + dir * dw));
-          let nh = nw * im.ar;
-          if (nh > ph) {
-            nh = ph;
-            nw = nh / im.ar;
+          const wanted = Math.max(40, startW + dir * dw);
+          let f = Math.min(wanted / startW, maxF);
+          // 어떤 이미지도 40px보다 작아지지 않게
+          const minW = group.length ? Math.min(...group.map((g) => g.w)) : startW;
+          f = Math.max(f, 40 / minW);
+
+          if (!group.length) {
+            const nw = startW * f;
+            const nh = nw * im.ar;
+            const left = corner.includes('w') ? anchorX - nw : anchorX;
+            const top = corner.includes('n') ? anchorY - nh : anchorY;
+            obj.style.width = nw + 'px';
+            obj.style.left = left + 'px';
+            obj.style.top = top + 'px';
+            im.w = nw / pw;
+            im.x = left / pw;
+            im.y = top / ph;
+            return;
           }
-          let left = corner.includes('w') ? anchorX - nw : anchorX;
-          let top = corner.includes('n') ? anchorY - nh : anchorY;
-          left = Math.max(0, Math.min(left, pw - nw));
-          top = Math.max(0, Math.min(top, ph - nh));
-          obj.style.width = nw + 'px';
-          obj.style.left = left + 'px';
-          obj.style.top = top + 'px';
-          im.w = nw / pw;
-          im.x = left / pw;
-          im.y = top / ph;
+
+          const nBoxL = corner.includes('w') ? anchorX - boxW * f : anchorX;
+          const nBoxT = corner.includes('n') ? anchorY - boxH * f : anchorY;
+          group.forEach((g) => {
+            const nw = g.w * f;
+            const left = nBoxL + (g.left - boxL) * f;
+            const top = nBoxT + (g.top - boxT) * f;
+            g.im.w = nw / pw;
+            g.im.x = left / pw;
+            g.im.y = top / ph;
+            const node = g.im.id === im.id ? obj : g.node;
+            if (node) {
+              node.style.width = nw + 'px';
+              node.style.left = left + 'px';
+              node.style.top = top + 'px';
+            }
+          });
         };
 
         const up = () => {
@@ -850,7 +1125,10 @@ export function createImageService(ctx: ImageContext) {
     if (fieldEl) fieldEl.classList.toggle('has-img', imgs.length > 0);
 
     imgs.forEach((im) => {
-      const obj = el('div', { class: 'imgobj', data: { img: String(im.id) } });
+      const obj = el('div', {
+        class: 'imgobj' + (im.g != null ? ' grouped' : ''),
+        data: { img: String(im.id) },
+      });
       const pic = el('img', { src: dispSrc(im), draggable: 'false' });
       obj.appendChild(pic);
       obj.appendChild(imgToolbar(block, im, obj, layer));
@@ -861,8 +1139,10 @@ export function createImageService(ctx: ImageContext) {
       enableImgMove(obj, block, im, layer);
       enableImgResize(obj, block, im, layer);
       obj.addEventListener('pointerdown', (e) => {
-        if ((e.target as Element).closest('.ihandle') || (e.target as Element).closest('.img-tb')) return;
-        selectImage(block.id, im.id);
+        const t = e.target as Element;
+        // 그림 자체·손잡이·도구막대는 각자 처리한다 (여기서 또 고르면 선택이 뒤집힌다).
+        if (t.tagName === 'IMG' || t.closest('.ihandle') || t.closest('.img-tb')) return;
+        selectImage(block.id, im.id, e.shiftKey || e.ctrlKey || e.metaKey);
       });
       layer.appendChild(obj);
     });
@@ -922,6 +1202,11 @@ export function createImageService(ctx: ImageContext) {
     addCoordPlane,
     arrangeImgs,
     arrangeImgsRow,
+    spreadImgs,
+    groupSelected,
+    ungroupSelected,
+    snapshotImgs,
+    applySnapshot,
     deselectImage,
     deleteSelectedImage,
     copySelectedImage,

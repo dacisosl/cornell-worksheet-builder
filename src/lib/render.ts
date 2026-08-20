@@ -24,10 +24,24 @@ export interface RenderContext {
   paginateSoon: () => void;
   registerPanel: (info: PanelInfo) => void;
   resetPanels: () => void;
+  /** 마지막으로 고른 칸의 블록 id — 새 블록을 그 아래에 넣는다 */
+  anchorBlockId: () => number | null;
+  /** 새로 만든 블록을 기준 칸으로 삼는다 */
+  setAnchorBlockId: (id: number) => void;
 }
 
 export function createRenderer(ctx: RenderContext) {
-  const { store, images, interactions, pageBook, paginateSoon, registerPanel, resetPanels } = ctx;
+  const {
+    store,
+    images,
+    interactions,
+    pageBook,
+    paginateSoon,
+    registerPanel,
+    resetPanels,
+    anchorBlockId,
+    setAnchorBlockId,
+  } = ctx;
 
   /** 패널 도구는 왼쪽 사이드바에서 조작한다 — 선택된(활성) 칸을 등록만 해 둔다. */
   function attachPanelTools(
@@ -55,11 +69,13 @@ export function createRenderer(ctx: RenderContext) {
       const sol = $('.field.f-sol', node);
       const ex = $('.field.f-ex', node);
       const cimg = $('.field.f-cimg', node);
+      const main = $('.field.f-main', node);
       const titleI = $('.btitle-input', node) as HTMLInputElement | null;
       if (prob && (b.type === 'problem' || b.type === 'mock')) b.probHtml = prob.innerHTML;
       if (sol && (b.type === 'problem' || b.type === 'mock')) b.solHtml = sol.innerHTML;
       if (ex && b.type === 'concept') b.exHtml = ex.innerHTML;
       if (cimg && b.type === 'concept') b.imgHtml = cimg.innerHTML;
+      if (main && b.type === 'image') b.html = main.innerHTML;
       if (titleI) b.title = titleI.value;
     });
   }
@@ -75,6 +91,7 @@ export function createRenderer(ctx: RenderContext) {
       b.solHtml = node.innerHTML;
     else if (node.classList.contains('f-ex') && b.type === 'concept') b.exHtml = node.innerHTML;
     else if (node.classList.contains('f-cimg') && b.type === 'concept') b.imgHtml = node.innerHTML;
+    else if (node.classList.contains('f-main') && b.type === 'image') b.html = node.innerHTML;
   }
 
   function field(cls: string, _ph: string, html: string): HTMLElement {
@@ -144,6 +161,7 @@ export function createRenderer(ctx: RenderContext) {
     return el('div', { class: 'field-tools' }, [
       mk(Icons.image, '이미지 넣기 — 파일에서 선택', () => pickImageFiles(b)),
       mk(Icons.axes, '좌표평면 넣기', () => images.addCoordPlane(b)),
+      mk(Icons.spread, '겹침 정리 — 크기는 그대로, 서로 안 겹치게', () => images.spreadImgs(b)),
       mk(Icons.landscape, '가로 정돈 — 이미지를 한 줄로 나란히', () => images.arrangeImgsRow(b)),
       mk(Icons.portrait, '세로 정돈 — 이미지를 위아래로 차곡차곡', () => images.arrangeImgs(b)),
     ]);
@@ -298,6 +316,13 @@ export function createRenderer(ctx: RenderContext) {
       pop.appendChild(
         el('button', {
           class: 'pop-btn',
+          html: Icons.spread + '<span>겹침 정리</span>',
+          onclick: () => images.spreadImgs(b),
+        }),
+      );
+      pop.appendChild(
+        el('button', {
+          class: 'pop-btn',
           html: Icons.landscape + '<span>이미지 가로 정돈</span>',
           onclick: () => images.arrangeImgsRow(b),
         }),
@@ -312,6 +337,13 @@ export function createRenderer(ctx: RenderContext) {
     } else {
       // 이미지 전용 블록
       pop.appendChild(el('div', { class: 'pop-h', text: '이미지' }));
+      pop.appendChild(
+        el('button', {
+          class: 'pop-btn',
+          html: Icons.spread + '<span>겹침 정리</span>',
+          onclick: () => images.spreadImgs(b),
+        }),
+      );
       pop.appendChild(
         el('button', {
           class: 'pop-btn',
@@ -679,7 +711,8 @@ export function createRenderer(ctx: RenderContext) {
 
   function renderImageOnlyBody(node: HTMLElement, b: Extract<Block, { type: 'image' }>): void {
     const layer = el('div', { class: 'img-layer' });
-    const drop = el('div', { class: 'imgonly-drop', tabindex: '0' });
+    // 이미지 칸에도 글을 쓸 수 있다.
+    const drop = field('f-main', '', b.html ?? '');
 
     const panel = el('div', { class: 'panel imgpanel imgonly', style: 'flex:1' }, [
       drop,
@@ -772,9 +805,20 @@ export function createRenderer(ctx: RenderContext) {
     syncFromDOM();
     const blk = makeBlock(store, type);
     if (blk.type === 'image' && opts?.width) blk.width = opts.width;
-    store.state.blocks.push(blk);
+
+    // 마지막으로 고른 칸 바로 아래에 넣는다 (고른 칸이 없으면 맨 뒤).
+    const anchor = anchorBlockId();
+    const at = anchor == null ? -1 : store.state.blocks.findIndex((x) => x.id === anchor);
+    if (at >= 0) store.state.blocks.splice(at + 1, 0, blk);
+    else store.state.blocks.push(blk);
+
+    setAnchorBlockId(blk.id);
     store.commit();
     render();
+    // 새 블록이 보이도록 스크롤
+    requestAnimationFrame(() => {
+      $(`.block[data-id="${blk.id}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    });
   }
 
   return { render, renderHead, syncFromDOM, addBlock, closePops };
