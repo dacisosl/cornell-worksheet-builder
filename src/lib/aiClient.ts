@@ -9,6 +9,8 @@ export interface AiSettings {
   provider: Provider;
   keys: Record<Provider, string>;
   models: Record<Provider, string>;
+  /** 성취기준을 사람이 확인하는 단계를 거칠지 (기본 켬) */
+  checkStandards: boolean;
 }
 
 export const AI_KEY = 'cornell-ai-settings';
@@ -135,6 +137,7 @@ export function defaultSettings(): AiSettings {
     provider: 'openrouter',
     keys: { openrouter: '', gemini: '' },
     models: { ...DEFAULT_MODELS },
+    checkStandards: true,
   };
 }
 
@@ -148,6 +151,7 @@ export function loadSettings(): AiSettings {
       provider: p.provider === 'gemini' ? 'gemini' : 'openrouter',
       keys: { ...base.keys, ...(p.keys ?? {}) },
       models: { ...base.models, ...(p.models ?? {}) },
+      checkStandards: p.checkStandards ?? true,
     };
   } catch {
     return base;

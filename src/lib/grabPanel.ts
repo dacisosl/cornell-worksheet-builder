@@ -242,6 +242,18 @@ export function createGrabPanel(ctx: GrabPanelContext) {
         ),
       ]),
       keyHint,
+      el('label', { class: 'gp-skip' }, [
+        (() => {
+          const cb = el('input', { type: 'checkbox' }) as HTMLInputElement;
+          cb.checked = settings.checkStandards;
+          cb.addEventListener('change', () => {
+            settings.checkStandards = cb.checked;
+            saveSettings(settings);
+          });
+          return cb;
+        })(),
+        '만들기 전에 성취기준을 확인하기',
+      ]),
       el('p', {
         class: 'gp-note',
         text: '키는 이 브라우저에만 저장되고, 고른 제공자에게만 전송됩니다. 초안의 글자와 배치 정보만 보내고 이미지 파일은 보내지 않습니다.',
@@ -477,6 +489,15 @@ export function createGrabPanel(ctx: GrabPanelContext) {
   /** 이번에 쓰인 성취기준 — 결과 화면에 보여 준다 */
   let usedStandards: { code: string; text: string; subject: string }[] = [];
 
+  /** 매니페스트에 박힌 성취기준을 목록으로 읽는다 */
+  function fromManifest(m: GrabManifest): { code: string; text: string; subject: string }[] {
+    return (m.standards ?? []).map((code) => ({
+      code,
+      text: m.standardsText?.[code] ?? '',
+      subject: '',
+    }));
+  }
+
   /**
    * 엔진 조립을 실패 없이 통과시키는 호출 체인.
    * 교사가 과목·성취기준을 몰라도 되도록, **학습지 내용에서 성취기준을 먼저 찾고**
@@ -556,6 +577,148 @@ export function createGrabPanel(ctx: GrabPanelContext) {
     }
   }
 
+  type StandardRow = { code: string; text: string; subject: string };
+
+  /** 사람이 고른 결과 */
+  type StandardChoice =
+    | { kind: 'use'; rows: StandardRow[] }
+    | { kind: 'none' }
+    | { kind: 'cancel' };
+
+  /**
+   * 성취기준 확인 단계 — AI가 고른 성취기준을 사람이 보고 정한다.
+   * 체크를 풀거나, 키워드로 다시 찾거나, 아예 없이 만들 수 있다.
+   */
+  function askStandards(
+    engine: GrabEngine,
+    picked: StandardRow[],
+    ctx: { school: string; subject: string; keywords: string[] },
+  ): Promise<StandardChoice> {
+    return new Promise((resolve) => {
+      let rows = picked.slice();
+      const chosen = new Set(rows.map((r) => r.code));
+
+      const box = el('div', { class: 'gp-confirm' });
+
+      const list = el('div', { class: 'gp-stdlist' });
+      function drawList(): void {
+        list.innerHTML = '';
+        if (!rows.length) {
+          list.appendChild(el('p', { class: 'gp-hint', text: '고른 성취기준이 없습니다.' }));
+          return;
+        }
+        rows.forEach((r) => {
+          const cb = el('input', { type: 'checkbox' }) as HTMLInputElement;
+          cb.checked = chosen.has(r.code);
+          cb.addEventListener('change', () => {
+            if (cb.checked) chosen.add(r.code);
+            else chosen.delete(r.code);
+            okBtn.textContent = chosen.size ? '이대로 계속' : '성취기준 없이 계속';
+          });
+          list.appendChild(
+            el('label', { class: 'gp-stditem' }, [
+              cb,
+              el('span', {}, [
+                el('b', { text: r.code }),
+                ' ',
+                r.text,
+                r.subject ? el('i', { class: 'gp-stdsub', text: ` (${r.subject})` }) : null,
+              ].filter(Boolean) as (Node | string)[]),
+            ]),
+          );
+        });
+      }
+
+      const search = el('input', {
+        class: 'gp-input',
+        placeholder: '다른 성취기준 찾기 — 예: 이차함수 그래프',
+      }) as HTMLInputElement;
+
+      const findBtn = el('button', {
+        class: 'gp-btn ghost',
+        text: '찾기',
+        onclick: async () => {
+          const kw = search.value.trim();
+          if (!kw) return;
+          findBtn.disabled = true;
+          try {
+            const hit = await engine.findStandards({
+              school: ctx.school || undefined,
+              keywords: [kw],
+              limit: 8,
+            });
+            if (hit?.rows.length) {
+              rows = hit.rows.map((r) => ({ code: r.code, text: r.text, subject: r.subject }));
+              chosen.clear();
+              rows.slice(0, 4).forEach((r) => chosen.add(r.code));
+              drawList();
+              okBtn.textContent = chosen.size ? '이대로 계속' : '성취기준 없이 계속';
+            }
+          } finally {
+            findBtn.disabled = false;
+          }
+        },
+      }) as HTMLButtonElement;
+      search.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          findBtn.click();
+        }
+      });
+
+      const finish = (choice: StandardChoice): void => {
+        box.remove();
+        resolve(choice);
+      };
+
+      const okBtn = el('button', {
+        class: 'gp-btn primary',
+        text: '이대로 계속',
+        onclick: () => {
+          const use = rows.filter((r) => chosen.has(r.code));
+          finish(use.length ? { kind: 'use', rows: use } : { kind: 'none' });
+        },
+      }) as HTMLButtonElement;
+
+      const skipAlways = el('input', { type: 'checkbox' }) as HTMLInputElement;
+      skipAlways.addEventListener('change', () => {
+        settings.checkStandards = !skipAlways.checked;
+        saveSettings(settings);
+      });
+
+      box.append(
+        el('h4', { text: '성취기준 확인' }),
+        el('p', {
+          class: 'gp-hint',
+          html:
+            '학습지 내용에 맞춰 <b>교육과정 자료에서 찾은</b> 성취기준입니다. ' +
+            '인쇄물에는 나오지 않고 학습 목표를 잡는 근거로만 쓰입니다.',
+        }),
+        list,
+        el('div', { class: 'gp-inline' }, [search, findBtn]),
+        el('div', { class: 'gp-actions' }, [
+          okBtn,
+          el('button', {
+            class: 'gp-btn ghost',
+            text: '성취기준 없이 만들기',
+            onclick: () => finish({ kind: 'none' }),
+          }),
+          el('button', {
+            class: 'gp-btn ghost',
+            text: '취소',
+            onclick: () => finish({ kind: 'cancel' }),
+          }),
+        ]),
+        el('label', { class: 'gp-skip' }, [skipAlways, '다음부터 이 확인 건너뛰기']),
+      );
+
+      drawList();
+      resultEl.innerHTML = '';
+      resultEl.appendChild(box);
+      box.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    });
+  }
+
   /** 분석 → 구조 조립 → 본문 저작 → 검수 → 2벌. 전 과정을 빌더 안에서 끝낸다. */
   async function runFull(): Promise<void> {
     if (busy) return;
@@ -578,6 +741,29 @@ export function createGrabPanel(ctx: GrabPanelContext) {
       const engine = await import('./grabRuntime');
       const composed: ComposeResult = await composeResilient(engine, analyzed);
 
+      // 2.5) 사람이 성취기준을 확인한다 (설정에서 끌 수 있음)
+      let manifestBase = composed.manifest;
+      if (settings.checkStandards) {
+        setStatus('성취기준을 확인해 주세요.');
+        const choice = await askStandards(engine, usedStandards.length ? usedStandards : fromManifest(composed.manifest), {
+          school: schoolOf(analyzed.gradeBand || ''),
+          subject: analyzed.subjectLabel,
+          keywords: [analyzed.topic, ...analyzed.standardsKeywords],
+        });
+        if (choice.kind === 'cancel') {
+          setStatus('취소했어요.');
+          return;
+        }
+        if (choice.kind === 'none') {
+          manifestBase = engine.withoutStandards(composed.manifest);
+          usedStandards = [];
+        } else {
+          manifestBase = engine.withStandards(composed.manifest, choice.rows);
+          usedStandards = choice.rows;
+        }
+        resultEl.innerHTML = '';
+      }
+
       // 3) 본문 저작
       setStatus('3/4 초안 내용을 살려 본문을 채우는 중…');
       const authoredText = await complete(settings, {
@@ -591,7 +777,7 @@ export function createGrabPanel(ctx: GrabPanelContext) {
       } catch {
         throw new Error('본문 저작 결과가 JSON이 아니었습니다. 다른 모델로 다시 시도해 보세요.');
       }
-      const { manifest, filled, skipped } = applyAuthored(composed.manifest, authored);
+      const { manifest, filled, skipped } = applyAuthored(manifestBase, authored);
 
       // 4) 조립 · 검수 · 2벌
       setStatus('4/4 활동지를 조립하고 검수하는 중…');

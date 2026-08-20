@@ -297,6 +297,26 @@ export async function compose(input: ComposeInput): Promise<ComposeResult> {
   return (await usecase.execute(input)) as ComposeResult;
 }
 
+/**
+ * 성취기준만 비운다 — 학습 목표 박스는 그대로 둔다.
+ * (목표 박스는 standard-label 블록이 그리므로 블록 자체를 지우면 목표까지 사라진다)
+ */
+export function withoutStandards(manifest: GrabManifest): GrabManifest {
+  return { ...manifest, standards: [], standardsText: {} };
+}
+
+/** 성취기준을 고른 것들로 갈아 끼운다. */
+export function withStandards(
+  manifest: GrabManifest,
+  rows: { code: string; text: string }[],
+): GrabManifest {
+  return {
+    ...manifest,
+    standards: rows.map((r) => r.code),
+    standardsText: Object.fromEntries(rows.map((r) => [r.code, r.text])),
+  };
+}
+
 /** 매니페스트 → 활동지 HTML (MODE_TOKEN 포함) */
 export async function assemble(manifest: GrabManifest): Promise<string> {
   const usecase = new AssembleWorksheet({ blockRepository, curriculum });
