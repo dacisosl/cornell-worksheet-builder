@@ -16,6 +16,7 @@ A4 코넬 노트 스타일 학습지를 블록 조합으로 만드는 웹 앱입
 - **A4 쪽 맞춤**: 페이지 경계 가이드, 자동 쪽 넘김
 - **저장/불러오기**: JSON 파일로 내보내기·가져오기 — 파일명은 `제목_YYYY-MM-DD.cornell.json`
 - **인쇄/PDF**: 브라우저 인쇄로 PDF 저장 (파일명은 학습지 제목)
+- **워크시트그랩 연계**: 1차 초안을 AI가 분석해 [worksheet-grab](https://github.com/pblsketch/worksheet-grab) 요청문 생성 (OpenRouter · Gemini)
 
 ## 시작하기
 
@@ -59,3 +60,39 @@ src/
 
 - 브라우저 `localStorage`에 자동 저장 (`cornell-worksheet-v3`)
 - v1/v2 데이터는 첫 실행 시 자동 마이그레이션
+
+## 워크시트그랩(worksheet-grab)으로 완성하기
+
+빌더로 **레이아웃과 뼈대**를 잡고, 교육 내용·검수·학생용/교사용 2벌 출력은
+[worksheet-grab](https://github.com/pblsketch/worksheet-grab)에 넘기는 흐름입니다.
+
+```
+코넬 학습지 빌더            (이 앱)            worksheet-grab
+  1차 초안 제작  ──▶  AI 분석 → 요청문 생성  ──▶  내용 저작 · 검수 · PDF 2벌
+                     (OpenRouter / Gemini)
+```
+
+### 쓰는 법
+
+1. 빌더에서 학습지를 1차로 만듭니다 (블록 배치·이미지·문항 뼈대).
+2. 상단 **워크시트그랩** 버튼을 누릅니다.
+3. **AI 제공자**를 고르고 API 키를 넣습니다. 둘 다 지원하며, 쓰실 쪽 하나만 넣으면 됩니다.
+
+   | 제공자 | 키 발급 | 비고 |
+   |---|---|---|
+   | OpenRouter | https://openrouter.ai/keys | 한 키로 여러 모델. `모델 불러오기`로 목록 조회 |
+   | Google Gemini | https://aistudio.google.com/apikey | `모델 불러오기`에 키가 필요 |
+
+4. **초안 분석 → 요청문 만들기**를 누르면 교과·학년·주제·학습목표·활동 구조(아키타입)를
+   추정하고, worksheet-grab에 붙여넣을 요청문을 만듭니다.
+5. **초안 JSON 저장**으로 `<제목>.cornell.json` 을 받아 worksheet-grab 폴더에 두고,
+   요청문을 복사해 그 폴더를 연 AI 도구(클로드 코드·코덱스 등)에 붙여넣습니다.
+
+### 알아두기
+
+- API 키는 **이 브라우저(localStorage)** 에만 저장되고, 고른 제공자에게만 전송됩니다.
+- 보내는 것은 **글자와 배치 정보**뿐입니다 — 이미지 파일 자체는 전송하지 않습니다.
+  (`보낼 내용 미리보기`로 확인할 수 있습니다.)
+- 성취기준은 worksheet-grab이 자체 자료에서 조회합니다. 분석 단계는 **코드를 지어내지 않고**
+  조회용 키워드만 만듭니다.
+- worksheet-grab 실행에는 Node.js 24 이상이 필요하고, PDF·PNG 출력에는 Chrome이 필요합니다.

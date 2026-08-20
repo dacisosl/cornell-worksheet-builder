@@ -43,6 +43,8 @@ export const Icons = {
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/><path d="M14 4l6 6M20 4l-6 6"/></svg>',
   spread:
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4" width="8" height="7" rx="1.2"/><rect x="13.5" y="4" width="8" height="7" rx="1.2"/><rect x="2.5" y="14" width="8" height="6" rx="1.2"/><rect x="13.5" y="14" width="8" height="6" rx="1.2"/></svg>',
+  spark:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.6 4.8L18.4 9.4 13.6 11 12 15.8 10.4 11 5.6 9.4l4.8-1.6z"/><path d="M18.5 15.5l.7 2.1 2.1.7-2.1.7-.7 2.1-.7-2.1-2.1-.7 2.1-.7z"/></svg>',
   check:
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>',
 } as const;
