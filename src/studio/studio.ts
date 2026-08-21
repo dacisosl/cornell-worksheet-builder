@@ -4,6 +4,9 @@
  * 빌더 상태는 읽기만 한다. 결과는 완전히 별개의 문서라 초안은 손대지 않는다.
  * 한 번 만든 문서는 브라우저에 남겨 두고, 초안이 그대로면 토큰을 한 톨도 쓰지 않고
  * 바로 다시 연다.
+ *
+ * 창을 접어도 작업은 계속된다. 전사는 몇 분씩 걸릴 수 있어서, 접어 둔 채 초안을
+ * 계속 손보다가 다 되면 알림 알약을 눌러 돌아오면 된다.
  */
 
 import {
@@ -82,9 +85,24 @@ function stripSrc(doc: PolishedDoc): PolishedDoc {
   return copy;
 }
 
-export default function openStudio(ctx: StudioContext): void {
-  if (document.querySelector('.st-overlay')) return;
+interface Session {
+  show: () => void;
+  hide: () => void;
+}
 
+/** 열려 있던(또는 접어 둔) 스튜디오. 두 번째로 눌러도 하던 작업을 이어 간다. */
+let session: Session | null = null;
+
+export default function openStudio(ctx: StudioContext): void {
+  if (session) {
+    session.show();
+    return;
+  }
+  session = createSession(ctx);
+  session.show();
+}
+
+function createSession(ctx: StudioContext): Session {
   const settings: AiSettings = loadSettings();
   let theme: ThemeName = 'riso';
   let doc: PolishedDoc | null = null;
@@ -93,6 +111,9 @@ export default function openStudio(ctx: StudioContext): void {
   let failures: CaptureResult[] = [];
   let running = false;
   let abort: AbortController | null = null;
+  let progress = { done: 0, total: 0, label: '' };
+  /** 지금 미리보기에 띄운 것이 내 완성본이 아니라 테마 예시인지 */
+  let showingSample = false;
 
   /* ── 뼈대 ─────────────────────────────────────────────── */
 
@@ -102,9 +123,16 @@ export default function openStudio(ctx: StudioContext): void {
     class: 'st-empty',
     html:
       '<b>완성본이 아직 없습니다</b>왼쪽에서 API 키와 모델을 고르고 <b style="display:inline;font-size:inherit">완성본 만들기</b>를 누르세요.<br>' +
-      '초안에 붙인 교과서 캡처를 읽어 글은 다시 조판하고, 그림은 잘라서 배치합니다.',
+      '초안에 붙인 교과서 캡처를 읽어 글은 다시 조판하고, 그림은 잘라서 배치합니다.<br>' +
+      '위 디자인 이름을 눌러 보면 각 형식의 예시 학습지를 미리 볼 수 있습니다.',
   });
   view.appendChild(empty);
+
+  const sampleBadge = el('div', {
+    class: 'st-badge',
+    text: '예시 — 완성본을 만들면 내 학습지 내용으로 바뀝니다',
+  });
+  sampleBadge.style.display = 'none';
 
   const progressBox = el('div', { class: 'st-progress' });
   progressBox.style.display = 'none';
@@ -113,27 +141,73 @@ export default function openStudio(ctx: StudioContext): void {
   const themeBar = el('div', { class: 'st-themes' });
   const printBtn = el('button', { class: 'st-btn', text: '인쇄 / PDF', onclick: doPrint });
   const saveBtn = el('button', { class: 'st-btn', text: 'HTML 저장', onclick: doSaveHtml });
+  const minBtn = el('button', {
+    class: 'st-btn',
+    text: '최소화',
+    title: '창만 접습니다. 만들던 작업은 계속 돌아갑니다.',
+    onclick: hide,
+  });
   const closeBtn = el('button', { class: 'st-btn', text: '닫기', onclick: close });
 
   const shell = el('div', { class: 'st-shell' }, [
     rail,
     el('div', { class: 'st-main' }, [
-      el('div', { class: 'st-top' }, [themeBar, printBtn, saveBtn, closeBtn]),
+      el('div', { class: 'st-top' }, [
+        themeBar,
+        el('div', { class: 'st-actions' }, [printBtn, saveBtn, minBtn, closeBtn]),
+      ]),
       view,
     ]),
   ]);
   const overlay = el('div', { class: 'st-overlay' }, shell);
   document.body.appendChild(overlay);
 
-  function close(): void {
-    abort?.abort();
-    overlay.remove();
+  /** 접어 둔 동안 상태를 알려 주는 알약 — 누르면 다시 펼친다. */
+  const pill = el('button', { class: 'st-pill', onclick: show });
+  document.body.appendChild(pill);
+
+  function show(): void {
+    overlay.style.display = '';
+    pill.style.display = 'none';
+    document.addEventListener('keydown', onKey);
+  }
+
+  function hide(): void {
+    overlay.style.display = 'none';
     document.removeEventListener('keydown', onKey);
+    syncPill();
   }
+
+  /** 닫기 = 이 작업을 버린다. 돌아가는 중이면 접기만 해서 하던 일을 지키다. */
+  function close(): void {
+    if (running) {
+      hide();
+      return;
+    }
+    overlay.remove();
+    pill.remove();
+    document.removeEventListener('keydown', onKey);
+    session = null;
+  }
+
   function onKey(e: KeyboardEvent): void {
-    if (e.key === 'Escape' && !running) close();
+    if (e.key === 'Escape') hide();
   }
-  document.addEventListener('keydown', onKey);
+
+  function syncPill(): void {
+    if (overlay.style.display !== 'none') {
+      pill.style.display = 'none';
+      return;
+    }
+    if (!running && !doc) {
+      pill.style.display = 'none';
+      return;
+    }
+    // CSS 기본값이 none 이므로 빈 문자열로 되돌리면 안 보인다.
+    pill.style.display = 'block';
+    pill.classList.toggle('busy', running);
+    pill.textContent = running ? progress.label : '완성본 준비됨 — 열기';
+  }
 
   /* ── 설정 레일 ────────────────────────────────────────── */
 
@@ -237,8 +311,11 @@ export default function openStudio(ctx: StudioContext): void {
   }
   function syncRun(): void {
     runBtn.disabled = running || !activeKey(settings);
-    printBtn.disabled = !doc;
-    saveBtn.disabled = !doc;
+    runBtn.textContent = running ? '만드는 중…' : doc ? '다시 만들기' : '완성본 만들기';
+    printBtn.disabled = !doc || showingSample;
+    saveBtn.disabled = !doc || showingSample;
+    closeBtn.textContent = running ? '접어 두기' : '닫기';
+    syncPill();
   }
   syncProvider();
 
@@ -252,31 +329,66 @@ export default function openStudio(ctx: StudioContext): void {
   /* ── 테마 탭 ──────────────────────────────────────────── */
 
   for (const name of THEME_ORDER) {
+    const t = THEMES[name];
     themeBar.appendChild(
-      el('button', {
-        class: 'st-theme',
-        text: THEMES[name].label,
-        title: THEMES[name].blurb,
-        'aria-pressed': String(name === theme),
-        onclick: () => setTheme(name),
-      }),
+      el(
+        'button',
+        {
+          class: 'st-theme',
+          'aria-pressed': String(name === theme),
+          data: { theme: name },
+          onclick: () => setTheme(name),
+        },
+        [
+          el('span', { class: 'st-theme-name', text: t.label }),
+          // 이름만 보고는 어떤 디자인인지 모른다 — 올려 두면 실물 한 장이 뜬다.
+          el('span', { class: 'st-peek' }, [
+            el('img', { src: `${import.meta.env.BASE_URL}samples/thumb-${name}.jpg`, alt: '', loading: 'lazy' }),
+            el('b', { text: t.label }),
+            el('i', { text: t.blurb }),
+          ]),
+        ],
+      ),
     );
   }
 
-  function setTheme(name: ThemeName): void {
-    if (!doc) return;
-    harvestEdits();
-    theme = name;
+  function markTheme(name: ThemeName): void {
     for (const b of themeBar.children) {
-      b.setAttribute('aria-pressed', String((b as HTMLElement).textContent === THEMES[name].label));
+      b.setAttribute('aria-pressed', String((b as HTMLElement).dataset.theme === name));
     }
-    persist();
-    preview();
+  }
+
+  function setTheme(name: ThemeName): void {
+    if (doc) harvestEdits();
+    theme = name;
+    markTheme(name);
+    if (doc) {
+      persist();
+      preview();
+    } else {
+      // 아직 만들기 전이라면 이 테마의 예시 학습지를 그대로 펼쳐 보여 준다.
+      previewSample(name);
+    }
+  }
+
+  /** 완성본이 없을 때 고른 테마의 예시 한 장을 미리보기에 띄운다 */
+  function previewSample(name: ThemeName): void {
+    showingSample = true;
+    empty.remove();
+    if (!frame.isConnected) {
+      view.textContent = '';
+      view.append(sampleBadge, frame);
+    }
+    sampleBadge.style.display = '';
+    frame.removeAttribute('srcdoc');
+    frame.src = `${import.meta.env.BASE_URL}samples/${name}.html`;
   }
 
   /* ── 실행 ─────────────────────────────────────────────── */
 
   function setProgress(done: number, total: number, label: string): void {
+    progress = { done, total, label };
+    syncPill();
     progressBox.style.display = '';
     progressBox.textContent = '';
     progressBox.append(
@@ -306,7 +418,7 @@ export default function openStudio(ctx: StudioContext): void {
     abort = new AbortController();
 
     try {
-      setProgress(0, 1, '캡처를 모으는 중…');
+      setProgress(0, 0, '캡처를 모으는 중…');
       const { units, textOnly } = await collectCaptures(ctx.state);
       captureSrc = new Map(units.map((u) => [u.id, u.src]));
 
@@ -419,8 +531,11 @@ export default function openStudio(ctx: StudioContext): void {
     empty.remove();
     if (!frame.isConnected) {
       view.textContent = '';
-      view.appendChild(frame);
+      view.append(sampleBadge, frame);
     }
+    showingSample = false;
+    sampleBadge.style.display = 'none';
+    frame.removeAttribute('src');
     frame.srcdoc = renderDocument(doc, theme, { editable: true, overrides });
   }
 
@@ -523,8 +638,8 @@ export default function openStudio(ctx: StudioContext): void {
 
   function setThemeSilently(name: ThemeName): void {
     theme = name;
-    for (const b of themeBar.children) {
-      b.setAttribute('aria-pressed', String((b as HTMLElement).textContent === THEMES[name].label));
-    }
+    markTheme(name);
   }
+
+  return { show, hide };
 }
