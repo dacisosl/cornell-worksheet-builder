@@ -1,0 +1,88 @@
+/* ── 시안 D  MONO ──────────────────────────────────────
+   모노톤 · 얇은 헤어라인 · 넉넉한 여백 · 은은한 버밀리언 포인트 */
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --sans:'Pretendard',-apple-system,'Apple SD Gothic Neo',sans-serif;
+  --ink:#1b1b1b; --sub:#666; --faint:#9a9a9a;
+  --hair:#e0e0e0; --rule:#1b1b1b;
+  --accent:#e0492f;
+  --line-h:8.8mm;
+}
+html{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+body{background:#ececea;font-family:var(--sans);color:var(--ink);
+  display:flex;justify-content:center;padding:28px 12px}
+.ws-page{width:210mm;min-height:297mm;background:#fff;
+  padding:13mm 15mm 11mm;box-shadow:0 3px 26px rgba(20,20,20,.18);
+  display:flex;flex-direction:column}
+@media print{
+  @page{size:A4;margin:0}
+  body{background:#fff;padding:0}
+  .ws-page{box-shadow:none}
+}
+.ws-doc{word-break:keep-all;overflow-wrap:break-word;flex:1;display:flex;flex-direction:column}
+
+/* ── 헤더 ── */
+.ws-over{display:flex;justify-content:space-between;align-items:baseline;
+  font-size:7.6pt;font-weight:600;letter-spacing:.22em;color:var(--faint);
+  text-transform:uppercase}
+.ws-over b{color:var(--accent);font-weight:700}
+.ws-title{font-size:27pt;font-weight:300;letter-spacing:-.01em;line-height:1.15;
+  margin-top:4.5mm}
+.ws-title strong{font-weight:800}
+.ws-bar{width:14mm;height:1.1mm;background:var(--accent);margin:3.4mm 0 0}
+.ws-meta{display:flex;gap:9mm;margin-top:4.6mm;padding-bottom:4mm;
+  border-bottom:1px solid var(--rule)}
+.ws-meta-field{display:flex;align-items:baseline;gap:2.6mm;font-size:8.5pt}
+.ws-meta-field b{font-weight:700;color:var(--sub);letter-spacing:.14em}
+.ws-meta-field span{display:inline-block;width:26mm;border-bottom:1px solid var(--hair)}
+
+/* ── 개념 ── */
+.ws-concept{margin-top:5.5mm;padding-left:5mm;border-left:1.6px solid var(--accent)}
+.ws-concept-title{font-size:7.8pt;font-weight:800;letter-spacing:.24em;color:var(--accent);
+  margin-bottom:1.8mm}
+.ws-concept-body{font-size:10pt;font-weight:400;line-height:1.9;color:#2c2c2c}
+.ws-concept-body b{font-weight:700}
+.ws-concept-body i{font-style:italic;letter-spacing:.02em;font-family:Georgia,serif;font-size:.96em}
+.ws-concept-body .formula{margin-top:2mm;font-size:10pt}
+
+/* ── 문항 ── */
+.ws-item{margin-top:6mm;break-inside:avoid}
+.ws-problem{display:grid;grid-template-columns:13mm 1fr;column-gap:4mm}
+.ws-no{font-size:13pt;font-weight:300;color:var(--accent);letter-spacing:.02em;
+  padding-top:.2mm;font-variant-numeric:tabular-nums}
+.ws-no small{display:block;font-size:6.6pt;font-weight:700;letter-spacing:.2em;
+  color:var(--faint);margin-top:1.2mm}
+.ws-tag{display:inline-block;font-size:7.2pt;font-weight:700;color:var(--accent);
+  border:1px solid var(--accent);border-radius:99px;padding:.5mm 2.6mm .6mm;
+  vertical-align:1.5px;margin-left:2.5mm;letter-spacing:.12em}
+.ws-stem{font-size:10.3pt;line-height:1.9}
+.ws-stem i,.ws-choices i,.ws-stem b i{font-style:italic;font-family:Georgia,serif;font-size:.96em;padding:0 .15mm}
+.ws-choices{display:grid;grid-template-columns:repeat(5,auto);justify-content:space-between;
+  margin-top:3mm;padding:2.4mm 0 0;border-top:1px solid var(--hair);font-size:10.2pt}
+.ws-choice{display:flex;gap:1.8mm;align-items:baseline}
+.ws-choice b{font-weight:400;color:var(--sub)}
+
+/* ── 도판 ── */
+.ws-figure--side{flex:0 0 52mm;width:52mm;margin:1mm 0 0;
+  border:1px solid var(--hair);padding:2.6mm 2.6mm 1.8mm;background:#fff}
+.ws-figure--side svg{width:100%;height:auto;display:block}
+.ws-figure--side figcaption{font-size:7.2pt;color:var(--faint);text-align:center;
+  margin-top:1.6mm;letter-spacing:.16em}
+.ws-figure--side figcaption b{color:var(--accent);font-weight:700}
+
+/* ── 풀이 공간 ── */
+.ws-answer{margin-top:4mm;position:relative;
+  height:calc(var(--lines) * var(--line-h));
+  background:repeating-linear-gradient(to bottom,
+    transparent 0, transparent calc(var(--line-h) - 1px),
+    var(--hair) calc(var(--line-h) - 1px), var(--hair) var(--line-h))}
+.ws-answer::before{content:"SOLUTION";position:absolute;top:1.6mm;left:0;
+  font-size:6.6pt;font-weight:700;color:#c9c9c9;letter-spacing:.26em}
+
+/* ── 푸터 ── */
+.ws-foot{margin-top:auto;padding-top:4mm;border-top:1px solid var(--rule);
+  display:flex;justify-content:space-between;align-items:baseline;
+  font-size:7.6pt;color:var(--faint);letter-spacing:.18em}
+.ws-foot .pg{color:var(--ink);font-weight:800}
+.ws-foot .pg b{color:var(--accent)}
+.clear{clear:both}

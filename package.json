@@ -10,8 +10,12 @@
     "deploy": "npm run build && firebase deploy --only hosting"
   },
   "devDependencies": {
+    "@types/katex": "^0.16.8",
     "firebase-tools": "^14.0.0",
     "typescript": "^5.7.2",
     "vite": "^6.0.3"
+  },
+  "dependencies": {
+    "katex": "^0.18.4"
   }
 }
