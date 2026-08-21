@@ -119,6 +119,8 @@ button { font-family: inherit; cursor: pointer; }
 .tbtn.primary:hover { background: #25395a; }
 .tbtn.ghost { background: transparent; border-color: transparent; color: var(--ink-soft); }
 .tbtn.ghost:hover { background: var(--panel-2); color: var(--ink); }
+.tbtn.accent { background: #f6efe4; border-color: #e2d3ba; color: #7a5a22; }
+.tbtn.accent:hover { background: #efe3ce; border-color: #d3bd97; }
 .tbtn svg { width: 15px; height: 15px; }
 
 .sidebar {

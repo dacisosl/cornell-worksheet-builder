@@ -248,12 +248,19 @@ export async function extractOne(
       json: true,
       signal,
     });
-    const raw = parseJsonLoose<unknown>(text);
+    let raw: unknown;
+    try {
+      raw = parseJsonLoose<unknown>(text);
+    } catch {
+      // 모델이 JSON 대신 잡담을 보냈다 — 교사에게는 원인만 짧게 알린다.
+      return fallback('모델이 형식을 지키지 않았습니다. 이미지로 넣었으니 다시 시도해 보세요.');
+    }
     const items = validateItems(raw, unit.id, unit.answerLines);
-    if (!items) return fallback('응답 형식이 맞지 않아 이미지로 넣었습니다.');
+    if (!items) return fallback('전사 내용이 비었거나 형식이 어긋납니다. 이미지로 넣었습니다.');
     return { unit, items, failed: false };
   } catch (e) {
-    return fallback(e instanceof Error ? e.message : String(e));
+    const msg = e instanceof Error ? e.message : String(e);
+    return fallback(`전사에 실패했습니다 — ${msg}`);
   }
 }
 

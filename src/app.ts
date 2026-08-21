@@ -189,6 +189,14 @@ export function createApp(root: HTMLElement) {
     }, 0);
   }
 
+  /** 완성하기 스튜디오는 쓸 때만 받아 온다 — 빌더 첫 화면을 무겁게 하지 않는다. */
+  async function openStudio(): Promise<void> {
+    renderer.syncFromDOM();
+    store.save();
+    const { default: open } = await import('./studio/studio');
+    open({ state: store.state, safeTitle, dateStamp });
+  }
+
   function exportWorksheet(): void {
     renderer.syncFromDOM();
     store.save();
@@ -341,6 +349,12 @@ export function createApp(root: HTMLElement) {
           onclick: () => setNoteMode(!store.state.meta.note.on),
         }),
         el('button', { class: 'tbtn ghost', text: '전체 비우기', onclick: resetAll }),
+        el('button', {
+          class: 'tbtn accent',
+          title: '캡처로 만든 초안을 디자인이 완성된 학습지로 편집합니다',
+          html: Icons.sparkle + '<span>완성하기</span>',
+          onclick: openStudio,
+        }),
         el('button', {
           class: 'tbtn primary',
           html: Icons.print + '<span>인쇄 / PDF</span>',
