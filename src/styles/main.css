@@ -134,7 +134,20 @@ button { font-family: inherit; cursor: pointer; }
   font-size: 11px; font-weight: 700; letter-spacing: .09em;
   text-transform: uppercase; color: var(--ink-faint);
   margin: 4px 4px 12px; white-space: nowrap;
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
 }
+/* 칸 위 도구 막대 켜기/끄기 */
+.side-toggle {
+  font: inherit; font-size: 10.5px; font-weight: 700; letter-spacing: .02em;
+  text-transform: none; color: var(--ink-soft);
+  padding: 3px 8px; border: 1px solid var(--line); border-radius: 99px;
+  background: #fff; cursor: pointer; white-space: nowrap;
+}
+.side-toggle:hover { border-color: var(--accent); color: var(--accent); }
+.side-toggle[aria-pressed=false] { background: var(--bg-soft, #f4f3ef); color: var(--ink-faint); }
+.side-collapsed .side-toggle { display: none; }
+/* 끄면 칸 위 막대만 사라진다 — 사이드바 도구는 그대로 */
+.ftools-off .field-tools { display: none; }
 
 /* ── 사이드바: 간편모드(아이콘만) / 설명모드 ── */
 .side-mode {

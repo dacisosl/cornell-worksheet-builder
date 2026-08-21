@@ -577,8 +577,27 @@ export function createApp(root: HTMLElement) {
 
     refreshSideTools();
 
+    /* 같은 도구가 칸 위에도 떠 있다. 내용을 가려서 거슬리면 여기서 끈다. */
+    const FT_KEY = 'cornell-field-tools';
+    if (localStorage.getItem(FT_KEY) === 'off') root.classList.add('ftools-off');
+
+    const ftBtn = el('button', { class: 'side-toggle', onclick: () => {
+      const off = root.classList.toggle('ftools-off');
+      localStorage.setItem(FT_KEY, off ? 'off' : 'on');
+      refreshFtBtn();
+    } });
+    function refreshFtBtn(): void {
+      const off = root.classList.contains('ftools-off');
+      ftBtn.textContent = off ? '칸 위 버튼 켜기' : '칸 위 버튼 끄기';
+      ftBtn.title = off
+        ? '칸 오른쪽 아래에 같은 도구 버튼을 다시 띄웁니다'
+        : '칸 오른쪽 아래에 떠 있는 도구 버튼을 숨깁니다 (도구는 여기서 계속 쓸 수 있습니다)';
+      ftBtn.setAttribute('aria-pressed', String(!off));
+    }
+    refreshFtBtn();
+
     return el('div', { class: 'side-section' }, [
-      el('div', { class: 'side-h', text: '칸 도구' }),
+      el('div', { class: 'side-h' }, [el('span', { text: '칸 도구' }), ftBtn]),
       el('div', { class: 'side-note tool-note', text: '칸을 클릭해 고른 뒤 사용하세요.' }),
       list,
     ]);
