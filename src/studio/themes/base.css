@@ -33,9 +33,9 @@ html{-webkit-print-color-adjust:exact;print-color-adjust:exact}
 /* 풀이칸 높이는 줄 수(--lines)로 정한다 */
 .ws-answer{--lines:4}
 
-/* 소문항 */
-.ws-subqs{margin-top:2.4mm;display:grid;gap:1.6mm}
-.ws-subq{display:flex;gap:2mm;align-items:baseline}
+/* 소문항 — 발문과 같은 크기로 읽히게 */
+.ws-subqs{margin-top:2.4mm;display:grid;gap:1.8mm;font-size:inherit}
+.ws-subq{display:flex;gap:2mm;align-items:baseline;line-height:1.72}
 
 /* 통째로 실은 캡처 */
 .ws-image{margin-top:4mm}
@@ -50,8 +50,10 @@ html{-webkit-print-color-adjust:exact;print-color-adjust:exact}
 [contenteditable]:hover{outline-color:rgba(120,120,120,.45)}
 [contenteditable]:focus{outline:1.5px solid rgba(40,110,255,.75)}
 
-/* 수식이 본문 행간을 밀지 않게 */
-.katex{font-size:1.03em}
+/* 수식이 본문 행간을 밀지 않게 — 다만 본문보다 작아 보이지는 않게 */
+.katex{font-size:1.06em}
+/* 수식은 통째로 움직인다 — (2, 6)이 줄 끝에서 쪼개지지 않게 */
+.ws-stem .katex,.ws-concept-body .katex,.ws-choice .katex,.ws-subq .katex{white-space:nowrap}
 .katex-display{margin:2mm 0}
 
 /* ── 초안 배치를 그대로 옮긴 조판 ────────────────────────────────
@@ -64,14 +66,20 @@ html{-webkit-print-color-adjust:exact;print-color-adjust:exact}
 .ws-trow{display:flex;gap:5mm;min-height:0;
   height:calc(var(--f) * (100% - var(--gaps) * 4.5mm));flex:0 0 auto}
 .ws-trow + .ws-trow{margin-top:4.5mm}
-.ws-cell{flex:1 1 0;min-width:0;min-height:0;display:flex;flex-direction:column;overflow:hidden}
+/* 칸 밖으로 삐져나오는 장식(스티커 라벨, FIG 탭)은 살려 두되, 넘치는 본문은 자른다 */
+.ws-cell{flex:1 1 0;min-width:0;min-height:0;display:flex;flex-direction:column;
+  overflow:hidden;overflow:clip;overflow-clip-margin:5mm}
 .ws-cellin{flex:1;min-height:0;display:flex;flex-direction:column}
 
 /* 칸 안에서는 아이템이 위아래 여백을 스스로 만들지 않는다 — 칸이 곧 여백이다 */
+/* 세로 배치로 바뀌어도 칩·라벨은 제 글자 폭만 차지한다 */
+.ws-page--grid .ws-concept-title,.ws-page--grid .ws-tag{align-self:flex-start}
 .ws-page--grid .ws-item{margin-top:0}
 .ws-page--grid .ws-item + .ws-item{margin-top:3mm}
 .ws-page--grid .ws-cellin > .ws-item{flex:1;min-height:0;display:flex;flex-direction:column}
-.ws-page--grid .ws-cellin > .ws-item > div:last-child{flex:1;min-height:0;display:flex;flex-direction:column}
+/* 세로로 세우는 건 문항의 본문 묶음뿐 — 개념 본문까지 세우면 수식마다 줄이 바뀐다 */
+.ws-page--grid .ws-cellin > .ws-problem > div:last-child{flex:1;min-height:0;display:flex;flex-direction:column}
+.ws-page--grid .ws-cellin > .ws-concept > .ws-concept-body{flex:1;min-height:0}
 .ws-page--grid .ws-row{flex:1;min-height:0}
 .ws-page--grid .ws-row-main{display:flex;flex-direction:column;min-height:0}
 

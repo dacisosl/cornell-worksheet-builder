@@ -61,7 +61,7 @@ body{background:#dfe3ea;font-family:var(--sans);color:var(--ink);
 .ws-concept-title{position:absolute;top:-2.6mm;left:4mm;background:var(--blue);color:#fff;
   font-family:var(--mono);font-size:6.9pt;font-weight:700;letter-spacing:.22em;
   padding:.9mm 3.2mm 1mm}
-.ws-concept-body{padding:4.6mm 5.5mm 3.8mm;font-size:10pt;line-height:1.9;color:#25324a}
+.ws-concept-body{padding:4.6mm 5.5mm 3.8mm;font-size:11pt;line-height:1.75;color:#1b2739}
 .ws-concept-body b{font-weight:700;color:var(--ink);
   background:linear-gradient(transparent 68%,#d9e4f5 68%)}
 .ws-concept-body i{font-style:italic;font-family:Georgia,serif;font-size:.96em;padding:0 .15mm}
@@ -81,11 +81,11 @@ body{background:#dfe3ea;font-family:var(--sans);color:var(--ink);
 .ws-tag{display:inline-block;font-family:var(--mono);font-size:6.9pt;font-weight:700;
   color:var(--blue);border:1px solid var(--blue);padding:.5mm 2.4mm .6mm;
   vertical-align:1.5px;margin-left:2.5mm;letter-spacing:.14em;background:#fff}
-.ws-stem{font-size:10.3pt;line-height:1.9}
+.ws-stem{font-size:11pt;line-height:1.75}
 .ws-stem i,.ws-choices i{font-style:italic;font-family:Georgia,serif;font-size:.96em;padding:0 .15mm}
 .ws-stem b{background:linear-gradient(transparent 68%,#d9e4f5 68%)}
 .ws-choices{display:grid;grid-template-columns:repeat(5,1fr);
-  margin-top:3mm;border:1px solid var(--line);background:#fff;font-size:10.2pt}
+  margin-top:3mm;border:1px solid var(--line);background:#fff;font-size:11pt}
 .ws-choice{display:flex;gap:1.8mm;align-items:baseline;justify-content:center;padding:2.1mm 0}
 .ws-choice+.ws-choice{border-left:1px solid var(--line)}
 .ws-choice b{font-weight:400;color:var(--mid)}

@@ -50,7 +50,7 @@ body{background:#d8d3c8;font-family:var(--sans);color:var(--ink);
 .ws-concept-title{display:inline-flex;align-items:center;gap:2mm;font-size:9.5pt;font-weight:900;
   background:var(--green);border:2px solid var(--ink);border-radius:99px;
   padding:.9mm 3.6mm 1.1mm;position:absolute;top:-4.2mm;left:5mm}
-.ws-concept-body{font-size:9.8pt;line-height:1.78;font-weight:500;margin-top:1.6mm}
+.ws-concept-body{font-size:11pt;line-height:1.72;font-weight:500;margin-top:1.6mm}
 .ws-concept-body b{background:linear-gradient(transparent 58%, var(--green) 58% 95%, transparent 95%)}
 .ws-concept-body i{font-family:Georgia,serif;font-style:italic}
 .ws-concept-body .formula{margin-top:1.6mm;text-align:center}
@@ -69,10 +69,10 @@ body{background:#d8d3c8;font-family:var(--sans);color:var(--ink);
 .ws-tag{display:inline-block;font-size:7.3pt;font-weight:800;background:var(--pink);
   border:1.8px solid var(--ink);border-radius:99px;padding:.5mm 2.8mm .7mm;
   vertical-align:2px;margin-left:2.4mm;transform:rotate(2deg)}
-.ws-stem{font-size:10.2pt;line-height:1.78;font-weight:600}
+.ws-stem{font-size:11pt;line-height:1.72;font-weight:600}
 .ws-stem i,.ws-choices i{font-family:Georgia,serif;font-style:italic;padding:0 .15mm}
 .ws-choices{display:grid;grid-template-columns:repeat(5,auto);justify-content:start;
-  column-gap:9mm;margin-top:2.8mm;font-size:10.2pt;font-weight:700}
+  column-gap:9mm;margin-top:2.8mm;font-size:11pt;font-weight:700}
 .ws-choice b{font-weight:800}
 
 /* ── 도판 ── */

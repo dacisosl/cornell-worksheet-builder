@@ -51,12 +51,13 @@ body{background:#d9d4c8;font-family:var(--sans);color:var(--ink);
 .ws-cut::after{content:"";flex:1;border-top:1.4px dashed var(--blue)}
 
 /* ── 개념: 반전 박스 ── */
-.ws-concept{margin:4.6mm 0 0;background:var(--blue);color:#fff;padding:4mm 5.5mm 4.4mm;
-  position:relative;box-shadow:1.4mm 1.4mm 0 var(--orange)}
-.ws-concept-title{font-family:var(--mono);font-size:8pt;letter-spacing:.22em;color:#ffd9c9;
-  margin-bottom:2mm;text-transform:uppercase}
-.ws-concept-body{font-size:9.8pt;line-height:1.8;font-weight:500}
-.ws-concept-body b{color:#ffb59a}
+.ws-concept{margin:4.6mm 0 0;background:#fff;color:var(--ink);padding:4.4mm 5.5mm 4.6mm;
+  position:relative;border:1.6px solid var(--blue);box-shadow:1.4mm 1.4mm 0 var(--orange)}
+.ws-concept-title{display:inline-block;font-family:var(--mono);font-size:8.4pt;letter-spacing:.2em;
+  color:#fff;background:var(--blue);padding:1mm 3mm 1.1mm;margin:0 0 2.6mm;text-transform:uppercase}
+.ws-concept-body{font-size:11pt;line-height:1.75;font-weight:500;color:var(--ink)}
+.ws-concept-body b{font-weight:800;color:var(--ink);
+  background:linear-gradient(transparent 56%, rgba(255,77,18,.32) 56%)}
 .ws-concept-body i{font-family:Georgia,serif;font-style:italic}
 .ws-concept-body .formula{margin-top:1.8mm;text-align:center}
 
@@ -70,11 +71,11 @@ body{background:#d9d4c8;font-family:var(--sans);color:var(--ink);
 .ws-tag{display:inline-block;font-family:var(--mono);font-size:7pt;font-weight:700;color:#fff;
   background:var(--orange);padding:.6mm 2.4mm .7mm;margin-left:2.4mm;vertical-align:2px;
   letter-spacing:.1em;transform:rotate(-1.6deg)}
-.ws-stem{font-size:10.2pt;line-height:1.78;font-weight:600}
+.ws-stem{font-size:11pt;line-height:1.72;font-weight:600}
 .ws-stem i,.ws-choices i,.ws-concept-body i{font-family:Georgia,serif;font-style:italic;padding:0 .15mm}
 .ws-stem mark{background:linear-gradient(transparent 58%, rgba(255,77,18,.28) 58%);color:inherit}
 .ws-choices{display:grid;grid-template-columns:repeat(5,auto);justify-content:start;
-  column-gap:9.5mm;margin-top:2.8mm;font-size:10.2pt;font-weight:600}
+  column-gap:9.5mm;margin-top:2.8mm;font-size:11pt;font-weight:600}
 .ws-choice b{font-weight:700;color:var(--orange)}
 
 /* ── 도판 ── */

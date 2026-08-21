@@ -40,7 +40,7 @@ body{background:#ececea;font-family:var(--sans);color:var(--ink);
 .ws-concept{margin-top:5.5mm;padding-left:5mm;border-left:1.6px solid var(--accent)}
 .ws-concept-title{font-size:7.8pt;font-weight:800;letter-spacing:.24em;color:var(--accent);
   margin-bottom:1.8mm}
-.ws-concept-body{font-size:10pt;font-weight:400;line-height:1.9;color:#2c2c2c}
+.ws-concept-body{font-size:11pt;font-weight:400;line-height:1.75;color:#232323}
 .ws-concept-body b{font-weight:700}
 .ws-concept-body i{font-style:italic;letter-spacing:.02em;font-family:Georgia,serif;font-size:.96em}
 .ws-concept-body .formula{margin-top:2mm;font-size:10pt}
@@ -55,10 +55,10 @@ body{background:#ececea;font-family:var(--sans);color:var(--ink);
 .ws-tag{display:inline-block;font-size:7.2pt;font-weight:700;color:var(--accent);
   border:1px solid var(--accent);border-radius:99px;padding:.5mm 2.6mm .6mm;
   vertical-align:1.5px;margin-left:2.5mm;letter-spacing:.12em}
-.ws-stem{font-size:10.3pt;line-height:1.9}
+.ws-stem{font-size:11pt;line-height:1.75}
 .ws-stem i,.ws-choices i,.ws-stem b i{font-style:italic;font-family:Georgia,serif;font-size:.96em;padding:0 .15mm}
 .ws-choices{display:grid;grid-template-columns:repeat(5,auto);justify-content:space-between;
-  margin-top:3mm;padding:2.4mm 0 0;border-top:1px solid var(--hair);font-size:10.2pt}
+  margin-top:3mm;padding:2.4mm 0 0;border-top:1px solid var(--hair);font-size:11pt}
 .ws-choice{display:flex;gap:1.8mm;align-items:baseline}
 .ws-choice b{font-weight:400;color:var(--sub)}
 
