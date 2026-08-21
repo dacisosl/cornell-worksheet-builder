@@ -27,6 +27,7 @@ import { el } from '../utils/dom';
 import { collectCaptures, extractAll, extractOne, type CaptureResult, type CaptureUnit } from './extract';
 import { fillFigures } from './figures';
 import type { FigureRef, PolishedDoc, WorksheetItem } from './schema';
+import { SAMPLE_DOC } from './sampleDoc';
 import { renderDocument } from './typeset';
 import { THEME_ORDER, THEMES, isThemeName, type ThemeName } from './themes';
 
@@ -114,10 +115,17 @@ function createSession(ctx: StudioContext): Session {
   let progress = { done: 0, total: 0, label: '' };
   /** 지금 미리보기에 띄운 것이 내 완성본이 아니라 테마 예시인지 */
   let showingSample = false;
+  /** 미리보기 배율 — 기본은 A4 한 쪽이 통째로 들어오는 '맞춤' */
+  let zoom: 'fit' | number = 'fit';
 
   /* ── 뼈대 ─────────────────────────────────────────────── */
 
   const frame = el('iframe', { title: '완성본 미리보기' });
+  /* 예시임을 못 알아볼 수 없게 — iframe 바깥에 겹쳐서 흐림에 같이 먹지 않는다 */
+  const mark = el('div', { class: 'st-mark', 'aria-hidden': 'true' });
+  for (let i = 0; i < 15; i += 1) mark.appendChild(el('span', { text: '예시 SAMPLE' }));
+  /* 배율은 여기서 건다 — iframe 자체는 늘 A4 실치수(210×297mm)다 */
+  const stage = el('div', { class: 'st-stage' }, [frame, mark]);
   const view = el('div', { class: 'st-view' });
   const empty = el('div', {
     class: 'st-empty',
@@ -139,6 +147,18 @@ function createSession(ctx: StudioContext): Session {
 
   const rail = el('aside', { class: 'st-rail' });
   const themeBar = el('div', { class: 'st-themes' });
+  const zoomSel = el('select', {
+    class: 'st-zoom',
+    title: '미리보기 배율',
+    onchange: () => {
+      zoom = zoomSel.value === 'fit' ? 'fit' : Number(zoomSel.value);
+      applyZoom();
+    },
+  }) as HTMLSelectElement;
+  for (const [v, label] of [['fit', '한 쪽 맞춤'], ['1', '100%'], ['1.25', '125%'], ['1.5', '150%']]) {
+    zoomSel.appendChild(el('option', { value: v, text: label }));
+  }
+
   const printBtn = el('button', { class: 'st-btn', text: '인쇄 / PDF', onclick: doPrint });
   const saveBtn = el('button', { class: 'st-btn', text: 'HTML 저장', onclick: doSaveHtml });
   const minBtn = el('button', {
@@ -154,7 +174,7 @@ function createSession(ctx: StudioContext): Session {
     el('div', { class: 'st-main' }, [
       el('div', { class: 'st-top' }, [
         themeBar,
-        el('div', { class: 'st-actions' }, [printBtn, saveBtn, minBtn, closeBtn]),
+        el('div', { class: 'st-actions' }, [zoomSel, printBtn, saveBtn, minBtn, closeBtn]),
       ]),
       view,
     ]),
@@ -170,6 +190,7 @@ function createSession(ctx: StudioContext): Session {
     overlay.style.display = '';
     pill.style.display = 'none';
     document.addEventListener('keydown', onKey);
+    applyZoom();
   }
 
   function hide(): void {
@@ -366,22 +387,14 @@ function createSession(ctx: StudioContext): Session {
       persist();
       preview();
     } else {
-      // 아직 만들기 전이라면 이 테마의 예시 학습지를 그대로 펼쳐 보여 준다.
-      previewSample(name);
+      // 아직 만들기 전이라면 이 형식의 예시 학습지를 펼쳐 보여 준다.
+      previewSample();
     }
   }
 
-  /** 완성본이 없을 때 고른 테마의 예시 한 장을 미리보기에 띄운다 */
-  function previewSample(name: ThemeName): void {
-    showingSample = true;
-    empty.remove();
-    if (!frame.isConnected) {
-      view.textContent = '';
-      view.append(sampleBadge, frame);
-    }
-    sampleBadge.style.display = '';
-    frame.removeAttribute('srcdoc');
-    frame.src = `${import.meta.env.BASE_URL}samples/${name}.html`;
+  /** 완성본이 없을 때 고른 형식의 예시 한 장을 미리보기에 띄운다 */
+  function previewSample(): void {
+    render(SAMPLE_DOC, true);
   }
 
   /* ── 실행 ─────────────────────────────────────────────── */
@@ -527,17 +540,43 @@ function createSession(ctx: StudioContext): Session {
   /* ── 미리보기 · 수정 수확 ─────────────────────────────── */
 
   function preview(): void {
-    if (!doc) return;
-    empty.remove();
-    if (!frame.isConnected) {
-      view.textContent = '';
-      view.append(sampleBadge, frame);
-    }
-    showingSample = false;
-    sampleBadge.style.display = 'none';
-    frame.removeAttribute('src');
-    frame.srcdoc = renderDocument(doc, theme, { editable: true, overrides });
+    if (doc) render(doc, false);
   }
+
+  /** 미리보기에 문서 한 편을 띄운다. 예시는 흐림·워터마크가 붙고 고칠 수 없다. */
+  function render(target: PolishedDoc, sample: boolean): void {
+    showingSample = sample;
+    empty.remove();
+    if (!stage.isConnected) {
+      view.textContent = '';
+      view.append(sampleBadge, stage);
+    }
+    sampleBadge.style.display = sample ? '' : 'none';
+    stage.classList.toggle('sample', sample);
+    frame.srcdoc = sample
+      ? renderDocument(target, theme, { editable: false })
+      : renderDocument(target, theme, { editable: true, overrides });
+    applyZoom();
+  }
+
+  /** A4 한 쪽이 모달 안에 통째로 들어오도록 배율을 맞춘다 */
+  function applyZoom(): void {
+    if (!stage.isConnected || !view.clientHeight) return;
+    const pw = frame.offsetWidth || 794;
+    const ph = frame.offsetHeight || 1123;
+    const pad = 36; // .st-view 좌우·상하 여백
+    const badge = sampleBadge.style.display === 'none' ? 0 : sampleBadge.offsetHeight + 10;
+    const availW = Math.max(160, view.clientWidth - pad);
+    const availH = Math.max(160, view.clientHeight - pad - badge);
+    const k = zoom === 'fit' ? Math.min(1, availW / pw, availH / ph) : zoom;
+    stage.style.setProperty('--k', String(k));
+    stage.style.width = `${Math.round(pw * k)}px`;
+    stage.style.height = `${Math.round(ph * k)}px`;
+    // filter는 scale 이전 좌표계라 화면에서는 k배로 얇아진다 — 되돌려 준다.
+    stage.style.setProperty('--sample-blur', `${(1.8 / k).toFixed(2)}px`);
+  }
+
+  new ResizeObserver(() => applyZoom()).observe(view);
 
   /** 교사가 미리보기에서 고친 글을 걷어 둔다. 경로가 문서 주소라 테마가 바뀌어도 살아남는다. */
   function harvestEdits(): void {
