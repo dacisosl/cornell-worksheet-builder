@@ -213,6 +213,146 @@ function sectionsHtml(
   return out.join('\n');
 }
 
+/* ── 초안 배치를 그대로 옮기는 조판 ──────────────────────────────
+   교사가 한 쪽에 문제 여섯과 여백 여섯을 놓았으면 완성본도 그래야 한다.
+   그래서 칸의 자리·크기(쪽·행·반칸·높이 비율)를 초안에서 받아 그대로 재현하고,
+   글은 그 칸 **안에서** 다시 조판한다. */
+
+/** 한 칸 = 초안의 블록 하나. 안의 아이템들을 그 칸 높이에 맞춰 앉힌다. */
+function cellHtml(
+  sec: DocSection,
+  si: number,
+  startNo: number,
+  theme: ThemeName,
+  opts: RenderOpts,
+): string {
+  let n = startNo;
+  const inner = sec.items
+    .map((item, ii) => {
+      if (item.kind === 'problem') n += 1;
+      return itemHtml(item, n, `s${si}.i${ii}`, theme, opts);
+    })
+    .join('\n');
+  // 초안이 정해 둔 문제칸:풀이칸 비율을 풀이 여백의 기본 크기로 쓴다.
+  const split = sec.geom?.ratio;
+  const style = typeof split === 'number' ? ` style="--split:${split.toFixed(3)}"` : '';
+  return `<div class="ws-cell"${style}><div class="ws-cellin">${inner}</div></div>`;
+}
+
+function countProblems(sec: DocSection): number {
+  return sec.items.filter((i) => i.kind === 'problem').length;
+}
+
+/** 배치 정보가 있는 문서를 쪽·행·칸 구조로 조판한다. */
+function laidOutPages(
+  doc: PolishedDoc,
+  theme: ThemeName,
+  opts: RenderOpts,
+  head: { title: string; subtitle: string; date: string },
+): string {
+  const t = THEMES[theme];
+
+  // 쪽 → 행 → 칸
+  const pages = new Map<number, Map<number, { sec: DocSection; si: number }[]>>();
+  doc.sections.forEach((sec, si) => {
+    const g = sec.geom!;
+    if (!pages.has(g.page)) pages.set(g.page, new Map());
+    const rows = pages.get(g.page)!;
+    if (!rows.has(g.row)) rows.set(g.row, []);
+    rows.get(g.row)!.push({ sec, si });
+  });
+
+  const pageNums = [...pages.keys()].sort((a, b) => a - b);
+  const total = pageNums.length;
+  let no = 0;
+
+  return pageNums
+    .map((pn, pi) => {
+      const rows = [...pages.get(pn)!.entries()].sort((a, b) => a[0] - b[0]);
+      const gaps = Math.max(0, rows.length - 1);
+
+      const rowsHtml = rows
+        .map(([, cells]) => {
+          const f = Math.max(...cells.map((c) => c.sec.geom!.hFrac));
+          const inner = cells
+            .map(({ sec, si }) => {
+              const html = cellHtml(sec, si, no, theme, opts);
+              no += countProblems(sec);
+              return html;
+            })
+            .join('');
+          return `<div class="ws-trow" style="--f:${f.toFixed(4)}">${inner}</div>`;
+        })
+        .join('\n');
+
+      const header =
+        pi === 0
+          ? t.header(head)
+          : `<div class="ws-cont"><span>이어서</span><b>${head.subtitle || head.title}</b></div>`;
+
+      return `<div class="ws-page ws-page--grid">${t.decor}<div class="ws-doc">
+${header}
+<div class="ws-stack" style="--gaps:${gaps}">
+${rowsHtml}
+</div>
+${t.footer({ ...head, page: `${pi + 1} / ${total}` })}
+</div></div>`;
+    })
+    .join('\n');
+}
+
+/**
+ * 여러 쪽짜리는 위에서 아래로 쌓는다.
+ * 테마 CSS가 body를 flex로 잡아 두어(한 쪽짜리 기준) 그냥 두면 쪽이 가로로 늘어선다.
+ * 테마보다 뒤에 붙여 순서로 이긴다.
+ */
+const GRID_TAIL_CSS = `
+body{display:block;padding:14px 0}
+/* 쪽 높이를 확정해야 행의 퍼센트 높이가 풀린다 (테마는 min-height만 준다) */
+.ws-page{height:297mm;min-height:297mm;overflow:hidden;margin:0 auto 14px}
+@media print{body{padding:0}.ws-page{margin:0}}
+`;
+
+/**
+ * 칸에 다 안 들어가면 글씨를 조금 줄여 맞춘다.
+ * 여백(풀이칸)이 먼저 줄고, 그래도 넘칠 때만 글씨가 줄어든다. 한계(0.78)까지 줄여도
+ * 넘치면 거기서 멈춘다 — 읽을 수 없을 만큼 작아지느니 교사가 칸을 키우는 편이 낫다.
+ */
+const FIT_SCRIPT = `<script>
+(function(){
+  var FLOOR = 0.78;
+  function shrink(cell, box){
+    var k = 1;
+    box.style.zoom = '';
+    while(box.scrollHeight > cell.clientHeight + 1 && k > FLOOR){
+      k = Math.round((k - 0.04) * 100) / 100;
+      box.style.zoom = k;
+    }
+    return k;
+  }
+  function fit(){
+    document.querySelectorAll('.ws-cell').forEach(function(cell){
+      var box = cell.querySelector('.ws-cellin');
+      if(!box) return;
+      cell.classList.remove('ws-noroom', 'ws-clip');
+      var k = shrink(cell, box);
+      // 아직도 넘치면 여백을 끝까지 내준 뒤 다시 줄여 본다
+      if(box.scrollHeight > cell.clientHeight + 1){
+        cell.classList.add('ws-noroom');
+        k = shrink(cell, box);
+      }
+      cell.classList.toggle('ws-tight', k < 1);
+      // 그래도 안 들어가면 잘린다 — 조용히 잘리지 않도록 표시해 둔다
+      cell.classList.toggle('ws-clip', box.scrollHeight > cell.clientHeight + 1);
+    });
+  }
+  if(document.readyState === 'complete') fit();
+  else window.addEventListener('load', fit);
+  window.addEventListener('beforeprint', fit);
+  if(document.fonts && document.fonts.ready) document.fonts.ready.then(fit);
+})();
+</script>`;
+
 /** 완성본 한 편을 통째로 만든다 — 이 문자열만 있으면 어디서든 열린다. */
 export function renderDocument(
   doc: PolishedDoc,
@@ -226,6 +366,16 @@ export function renderDocument(
     date: escapeHtml(doc.meta.date),
   };
 
+  // 초안 배치를 아는 문서는 그 배치대로, 모르는 문서(예시 등)는 한 단으로 흐른다.
+  const laidOut = doc.sections.length > 0 && doc.sections.every((s) => s.geom);
+  const body = laidOut
+    ? laidOutPages(doc, theme, opts, head)
+    : `<div class="ws-page">${t.decor}<div class="ws-doc">
+${t.header(head)}
+${sectionsHtml(doc.sections, theme, opts)}
+${t.footer(head)}
+</div></div>`;
+
   return `<!doctype html>
 <html lang="ko">
 <head>
@@ -237,14 +387,12 @@ export function renderDocument(
 ${KATEX_CSS}
 ${BASE_CSS}
 ${t.css}
+${laidOut ? GRID_TAIL_CSS : ''}
 </style>
 </head>
 <body>
-<div class="ws-page">${t.decor}<div class="ws-doc">
-${t.header(head)}
-${sectionsHtml(doc.sections, theme, opts)}
-${t.footer(head)}
-</div></div>
+${body}
+${laidOut ? FIT_SCRIPT : ''}
 </body>
 </html>`;
 }

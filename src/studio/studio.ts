@@ -26,6 +26,7 @@ import type { AppState } from '../types';
 import { el } from '../utils/dom';
 import { collectCaptures, extractAll, extractOne, type CaptureResult, type CaptureUnit } from './extract';
 import { fillFigures } from './figures';
+import { readLayout } from './layout';
 import type { FigureRef, PolishedDoc, WorksheetItem } from './schema';
 import { SAMPLE_DOC } from './sampleDoc';
 import { renderDocument } from './typeset';
@@ -512,17 +513,27 @@ function createSession(ctx: StudioContext): Session {
     const blockOrder = new Map(ctx.state.blocks.map((b, i) => [b.id, i]));
     order.sort((a, b) => (blockOrder.get(a) ?? 0) - (blockOrder.get(b) ?? 0));
 
+    // 지면 배치도 그대로 옮긴다 — 칸 크기와 자리는 교사가 정한 것이다.
+    const layout = readLayout();
+    const ratioOf = new Map(
+      ctx.state.blocks.map((b) => [b.id, 'ratio' in b ? (b as { ratio: number }).ratio : undefined]),
+    );
+
     return {
       meta: {
         title: ctx.state.meta.title || '학습지',
         subtitle: ctx.state.meta.contTitle || undefined,
         date: ctx.dateStamp(),
       },
-      sections: order.map((id) => ({
-        srcBlockId: id,
-        srcType: typeOf.get(id) ?? 'problem',
-        items: byBlock.get(id) ?? [],
-      })),
+      sections: order.map((id) => {
+        const g = layout.get(id);
+        return {
+          srcBlockId: id,
+          srcType: typeOf.get(id) ?? 'problem',
+          geom: g ? { ...g, ratio: ratioOf.get(id) } : undefined,
+          items: byBlock.get(id) ?? [],
+        };
+      }),
     };
   }
 
@@ -557,6 +568,22 @@ function createSession(ctx: StudioContext): Session {
       ? renderDocument(target, theme, { editable: false })
       : renderDocument(target, theme, { editable: true, overrides });
     applyZoom();
+    if (!sample) frame.addEventListener('load', reportTightCells, { once: true });
+  }
+
+  /**
+   * 초안 칸보다 글이 많아 잘린 칸이 있으면 알려 준다.
+   * 초안에서 그 칸만 키우고 다시 만들면 되고, 다시 만드는 데 토큰은 들지 않는다.
+   */
+  function reportTightCells(): void {
+    const d = frame.contentDocument;
+    if (!d) return;
+    window.setTimeout(() => {
+      const clipped = d.querySelectorAll('.ws-clip').length;
+      if (clipped > 0) {
+        note(`칸 ${clipped}개는 글이 많아 일부가 가려졌습니다. 초안에서 그 칸을 키운 뒤 다시 만들어 주세요.`);
+      }
+    }, 400);
   }
 
   /** A4 한 쪽이 모달 안에 통째로 들어오도록 배율을 맞춘다 */

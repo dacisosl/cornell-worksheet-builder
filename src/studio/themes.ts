@@ -19,6 +19,8 @@ export interface DocHead {
   title: string;
   subtitle: string;
   date: string;
+  /** 쪽 표시 — 여러 쪽으로 조판할 때 "2 / 3"처럼 채워 넣는다 */
+  page?: string;
 }
 
 export interface Theme {
@@ -106,7 +108,7 @@ export const THEMES: Record<ThemeName, Theme> = {
   <footer class="ws-foot">
     <span>${h.title}</span>
     <span>${h.date}</span>
-    <span class="pg">1/1</span>
+    <span class="pg">${h.page ?? '1/1'}</span>
   </footer>`,
     number: (n, sub) => `<div class="ws-no">${String(n).padStart(2, '0')}<small>${sub}</small></div>`,
     conceptTitle: (t) => `<div class="ws-concept-title"><em>CONCEPT</em>${t}</div>`,
@@ -132,7 +134,7 @@ export const THEMES: Record<ThemeName, Theme> = {
     footer: (h) => `
   <footer class="ws-foot">
     <span>${h.title} ✶ 다 풀면 스티커 붙이기 ⬜⬜⬜</span>
-    <span class="pg">1 / 1</span>
+    <span class="pg">${h.page ?? '1 / 1'}</span>
   </footer>`,
     number: (n) => `<div class="ws-no">
       <svg viewBox="0 0 40 40"><circle cx="20" cy="20" r="17" fill="${
@@ -158,7 +160,7 @@ export const THEMES: Record<ThemeName, Theme> = {
     footer: (h) => `
   <footer class="ws-foot">
     <span>${h.title}</span>
-    <span class="pg"><b>·</b> 1 / 1</span>
+    <span class="pg"><b>·</b> ${h.page ?? '1 / 1'}</span>
   </footer>`,
     number: (n, sub) => `<div class="ws-no">${String(n).padStart(2, '0')}<small>${sub}</small></div>`,
     conceptTitle: (t) => `<div class="ws-concept-title">CONCEPT — ${t}</div>`,
@@ -193,7 +195,7 @@ export const THEMES: Record<ThemeName, Theme> = {
     <span><b>PROJECT</b> ${h.title}</span>
     <span class="grow"><b>DATE</b> ${h.date}</span>
     <span><b>SCALE</b> NTS</span>
-    <span class="pg"><b>SHEET</b> 1 / 1</span>
+    <span class="pg"><b>SHEET</b> ${h.page ?? '1 / 1'}</span>
   </footer>`,
     number: (n, sub) => `<div class="ws-no"><span class="disc">${n}</span><small>${sub}</small></div>`,
     conceptTitle: (t) => `<div class="ws-concept-title">NOTE — ${t}</div>`,

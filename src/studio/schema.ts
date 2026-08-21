@@ -55,10 +55,21 @@ export interface ImageItem {
 
 export type WorksheetItem = ProblemItem | ConceptItem | ImageItem;
 
+/** 초안에서 이 칸이 놓여 있던 자리 (layout.ts가 읽어 온 값) */
+export interface SectionGeom {
+  page: number;
+  row: number;
+  half: boolean;
+  hFrac: number;
+  ratio?: number;
+}
+
 export interface DocSection {
   /** 어느 초안 블록에서 왔는지 */
   srcBlockId: number;
   srcType: string;
+  /** 초안의 배치. 있으면 조판이 그 자리·크기를 그대로 따른다. */
+  geom?: SectionGeom;
   items: WorksheetItem[];
 }
 

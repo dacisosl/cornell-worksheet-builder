@@ -53,3 +53,45 @@ html{-webkit-print-color-adjust:exact;print-color-adjust:exact}
 /* 수식이 본문 행간을 밀지 않게 */
 .katex{font-size:1.03em}
 .katex-display{margin:2mm 0}
+
+/* ── 초안 배치를 그대로 옮긴 조판 ────────────────────────────────
+   교사가 잡아 둔 쪽·행·칸을 그대로 재현한다. 행 높이는 그 쪽 본문 높이에 대한
+   비율(--f)이고, 반칸 두 개는 한 행에 나란히 선다. */
+.ws-page--grid{page-break-after:always;break-after:page}
+.ws-page--grid:last-of-type{page-break-after:auto;break-after:auto}
+
+.ws-stack{--gaps:0;flex:1;min-height:0;display:flex;flex-direction:column}
+.ws-trow{display:flex;gap:5mm;min-height:0;
+  height:calc(var(--f) * (100% - var(--gaps) * 4.5mm));flex:0 0 auto}
+.ws-trow + .ws-trow{margin-top:4.5mm}
+.ws-cell{flex:1 1 0;min-width:0;min-height:0;display:flex;flex-direction:column;overflow:hidden}
+.ws-cellin{flex:1;min-height:0;display:flex;flex-direction:column}
+
+/* 칸 안에서는 아이템이 위아래 여백을 스스로 만들지 않는다 — 칸이 곧 여백이다 */
+.ws-page--grid .ws-item{margin-top:0}
+.ws-page--grid .ws-item + .ws-item{margin-top:3mm}
+.ws-page--grid .ws-cellin > .ws-item{flex:1;min-height:0;display:flex;flex-direction:column}
+.ws-page--grid .ws-cellin > .ws-item > div:last-child{flex:1;min-height:0;display:flex;flex-direction:column}
+.ws-page--grid .ws-row{flex:1;min-height:0}
+.ws-page--grid .ws-row-main{display:flex;flex-direction:column;min-height:0}
+
+/* 풀이 여백은 초안이 정한 몫(--split)을 기본으로 갖되, 글이 길면 먼저 양보한다 */
+.ws-page--grid .ws-answer{flex:1 1 calc((1 - var(--split,.5)) * 100%);height:auto;min-height:10mm}
+
+/* 이어지는 쪽의 간이 머리글 */
+.ws-cont{display:flex;align-items:baseline;gap:2.5mm;padding-bottom:2.5mm;
+  margin-bottom:4mm;border-bottom:1px solid currentColor;opacity:.75}
+.ws-cont span{font-size:7.6pt;letter-spacing:.14em;text-transform:uppercase;opacity:.7}
+.ws-cont b{font-size:11pt;font-weight:800}
+
+/* 글이 많아 여백까지 내준 칸 */
+.ws-noroom .ws-answer{min-height:0}
+
+/* 맞춰 줄인 칸 · 그래도 잘린 칸 — 화면에서만 알린다 (인쇄에는 안 나온다) */
+.ws-tight,.ws-clip{position:relative}
+@media screen{
+  .ws-tight::after{content:"칸에 맞춰 줄임";position:absolute;right:0;bottom:0;
+    font-size:6.4pt;letter-spacing:.06em;color:#c08a2e;opacity:.75}
+  .ws-clip{outline:1.2px dashed #d4553c;outline-offset:-1px}
+  .ws-clip::after{content:"칸이 작아 일부가 가려짐";color:#d4553c;opacity:1;font-weight:700}
+}
