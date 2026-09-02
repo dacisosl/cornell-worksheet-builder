@@ -152,11 +152,23 @@ function editable(
   return `<${tag} class="${cls}"${attr}>${body}</${tag}>`;
 }
 
+/** 초안에서 차지하던 폭(칸 폭 대비 %) — 없으면 null 로 두어 기본 크기를 쓴다 */
+function widthPct(wFrac: number | undefined, min: number, max: number): number | null {
+  if (typeof wFrac !== 'number' || !Number.isFinite(wFrac)) return null;
+  return Math.round(Math.min(max, Math.max(min, wFrac * 100)));
+}
+
+/**
+ * 도판은 초안에서 보이던 크기로 앉힌다 — 칸 가득 늘리지 않는다.
+ * 교사가 작게 붙인 그림은 완성본에서도 작아야 칸 배치가 무너지지 않는다.
+ */
 function figureHtml(f: FigureRef, wide: boolean): string {
   if (!f.src) return '';
   const cap = f.caption ? `<figcaption>${escapeHtml(f.caption)}</figcaption>` : '';
   const cls = wide ? 'ws-figure ws-figure--wide' : 'ws-figure ws-figure--side';
-  return `<figure class="${cls}"><img src="${f.src}" alt="">${cap}</figure>`;
+  const pct = widthPct(f.wFrac, 12, wide ? 100 : 60);
+  const style = pct == null ? '' : wide ? ` style="width:${pct}%"` : ` style="flex-basis:${pct}%"`;
+  return `<figure class="${cls}"${style}><img src="${f.src}" alt="">${cap}</figure>`;
 }
 
 function problemHtml(item: ProblemItem, n: number, path: string, opts: RenderOpts): string {
@@ -207,7 +219,9 @@ function conceptHtml(item: ConceptItem, path: string, opts: RenderOpts): string 
 function imageHtml(item: ImageItem): string {
   if (!item.src) return '';
   const cap = item.caption ? `<figcaption>${escapeHtml(item.caption)}</figcaption>` : '';
-  return `<section class="ws-item ws-image"><figure><img src="${item.src}" alt="">${cap}</figure></section>`;
+  const pct = widthPct(item.wFrac, 12, 100);
+  const style = pct == null ? '' : ` style="width:${pct}%"`;
+  return `<section class="ws-item ws-image"><figure${style}><img src="${item.src}" alt="">${cap}</figure></section>`;
 }
 
 function itemHtml(item: WorksheetItem, n: number, path: string, opts: RenderOpts): string {

@@ -27,6 +27,8 @@ export interface CaptureUnit {
   answerLines: number;
   tagLabel: string;
   blockType: Block['type'];
+  /** 캡처 폭 ÷ 칸 폭 (0..1) — 그림을 초안에서 보이던 크기 그대로 되살릴 때 쓴다 */
+  wFrac: number;
 }
 
 export interface CaptureResult {
@@ -95,7 +97,10 @@ const CELL_MAX_SIDE = 2600;
  * 교사가 한 칸에 붙였다는 건 "이게 한 덩어리"라는 뜻이다 — 조각을 따로따로
  * 보여 주면 문제가 토막나므로, 그 칸을 통째로 찍은 것처럼 한 장으로 만든다.
  */
-async function compositeCell(imgs: ImageObj[], blockId: number): Promise<string> {
+async function compositeCell(
+  imgs: ImageObj[],
+  blockId: number,
+): Promise<{ src: string; wFrac: number }> {
   const loaded = await Promise.all(imgs.map(async (im) => ({ im, el: await loadImage(srcOf(im)) })));
 
   // 배치는 칸 폭 비율(x, w)과 칸 높이 비율(y)이다. 실제 칸의 치수로 편다.
@@ -124,18 +129,21 @@ async function compositeCell(imgs: ImageObj[], blockId: number): Promise<string>
   scale = Math.min(scale, 3, CELL_MAX_SIDE / Math.max(cw, ch));
   scale = Math.max(scale, 0.2);
 
+  // 합성 캡처가 칸 폭에서 차지하는 몫 — 완성본이 그림 크기를 되살릴 때 기준이 된다.
+  const wFrac = Math.min(1, Math.max(0.05, cw / pw));
+
   const c = document.createElement('canvas');
   c.width = Math.max(1, Math.round(cw * scale));
   c.height = Math.max(1, Math.round(ch * scale));
   const g = c.getContext('2d');
-  if (!g) return srcOf(imgs[0]);
+  if (!g) return { src: srcOf(imgs[0]), wFrac: Math.min(1, imgs[0].w) };
   g.fillStyle = '#ffffff';
   g.fillRect(0, 0, c.width, c.height);
   g.imageSmoothingQuality = 'high';
   for (const b of boxes) {
     g.drawImage(b.el, (b.x - minX + pad) * scale, (b.y - minY + pad) * scale, b.w * scale, b.h * scale);
   }
-  return c.toDataURL('image/png');
+  return { src: c.toDataURL('image/png'), wFrac };
 }
 
 /**
@@ -164,6 +172,7 @@ export async function collectCaptures(
         answerLines: lines,
         tagLabel: tag,
         blockType: b.type,
+        wFrac: 1,
       };
       textOnly.push({ unit, items: itemsFromText(b, text, lines), failed: false });
       continue;
@@ -172,15 +181,19 @@ export async function collectCaptures(
     // 한 칸의 조각들은 전부 한 장으로 합친다 — 칸이 곧 문제 단위다.
     // 조각을 따로 보내면 이어지는 지문이 토막나 딴 문제로 읽히기 때문에,
     // 초안 배치 그대로 합성한 "칸 스냅숏" 하나만 모델에게 보여 준다.
-    const src = imgs.length > 1 ? await compositeCell(imgs, b.id) : srcOf(imgs[0]);
+    const cap =
+      imgs.length > 1
+        ? await compositeCell(imgs, b.id)
+        : { src: srcOf(imgs[0]), wFrac: Math.min(1, Math.max(0.05, imgs[0].w)) };
     units.push({
       id: `${b.id}:cell`,
       blockId: b.id,
-      src,
+      src: cap.src,
       contextText: text,
       answerLines: lines,
       tagLabel: tag,
       blockType: b.type,
+      wFrac: cap.wFrac,
     });
   }
 
@@ -190,7 +203,16 @@ export async function collectCaptures(
 /** 교사가 친 글만 있는 칸 — AI 없이 바로 아이템으로 만든다 */
 function itemsFromText(b: Block, text: string, lines: number): WorksheetItem[] {
   if (b.type === 'concept') {
-    return [{ kind: 'concept', title: b.title || undefined, body: [{ t: 'text', s: text }] }];
+    // 제목은 용어 칸으로 가므로 본문에서 뺀다 — 같은 글이 두 번 실리지 않게.
+    const title = b.title?.trim();
+    const body = title && text.startsWith(title) ? text.slice(title.length).trim() : text;
+    return [
+      {
+        kind: 'concept',
+        title: title || undefined,
+        body: body ? [{ t: 'text', s: body }] : [],
+      },
+    ];
   }
   return [
     {
@@ -234,6 +256,23 @@ function userPrompt(unit: CaptureUnit): string {
   return `학습지 한 칸을 통째로 찍은 캡처입니다. 배치 순서대로 읽어 문제 단위로 전사하세요. 풀이칸은 약 ${unit.answerLines}줄로 잡습니다.${ctx}`;
 }
 
+/**
+ * 그림이 초안에서 보이던 크기를 그대로 물려준다.
+ * 도판 bbox 는 캡처 기준 비율이고 캡처는 칸의 wFrac 만큼이므로, 둘을 곱하면
+ * "칸 폭의 몇 %" 가 된다 — 조판은 이 값으로 그림을 앉혀 칸 가득 늘리지 않는다.
+ */
+function keepDraftSizes(items: WorksheetItem[], unit: CaptureUnit): void {
+  for (const it of items) {
+    if (it.kind === 'image') {
+      it.wFrac = unit.wFrac;
+      continue;
+    }
+    for (const f of it.figures ?? []) {
+      f.wFrac = Math.min(1, Math.max(0.08, f.bbox[2] * unit.wFrac));
+    }
+  }
+}
+
 /** 캡처 한 장을 전사한다. 실패하면 이미지 폴백을 돌려준다. */
 export async function extractOne(
   settings: AiSettings,
@@ -242,7 +281,7 @@ export async function extractOne(
 ): Promise<CaptureResult> {
   const fallback = (error: string): CaptureResult => ({
     unit,
-    items: [{ kind: 'image', from: unit.id }],
+    items: [{ kind: 'image', from: unit.id, wFrac: unit.wFrac }],
     failed: true,
     error,
   });
@@ -264,6 +303,7 @@ export async function extractOne(
     }
     const items = validateItems(raw, unit.id, unit.answerLines);
     if (!items) return fallback('전사 내용이 비었거나 형식이 어긋납니다. 이미지로 넣었습니다.');
+    keepDraftSizes(items, unit);
     return { unit, items, failed: false };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);

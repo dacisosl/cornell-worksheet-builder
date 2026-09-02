@@ -16,8 +16,10 @@ export interface FigureRef {
   caption?: string;
   /** 잘라낸 결과 dataURL. 저장할 때는 비우고 열 때 다시 만든다. */
   src?: string;
-  /** 어느 캡처에서 왔는지 (blockId:imgId) */
+  /** 어느 캡처에서 왔는지 (blockId:cell) */
   from: string;
+  /** 초안에서 차지하던 폭 ÷ 칸 폭 (0..1). 없으면 조판이 기본 크기로 앉힌다. */
+  wFrac?: number;
 }
 
 export interface ProblemItem {
@@ -51,6 +53,8 @@ export interface ImageItem {
   from: string;
   src?: string;
   caption?: string;
+  /** 초안에서 차지하던 폭 ÷ 칸 폭 (0..1) */
+  wFrac?: number;
 }
 
 export type WorksheetItem = ProblemItem | ConceptItem | ImageItem;

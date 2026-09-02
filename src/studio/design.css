@@ -107,8 +107,9 @@ body{background:#ececea;font-family:var(--sans);color:var(--ink);
 .ws-row-main{flex:1;min-width:0}
 .ws-figure{border:.25mm solid var(--ink-soft);padding:2.4mm;background:var(--paper)}
 .ws-figure img{width:100%;height:auto;display:block}
-.ws-figure--side{flex:0 0 min(76mm,42%)}
-.ws-figure--wide{margin-top:3mm}
+.ws-figure--side{flex:0 0 min(76mm,42%);min-width:0}
+/* 초안 크기를 아는 도판은 인라인 width 로 그 크기를 지킨다 — 칸 가득 늘리지 않는다 */
+.ws-figure--wide{margin-top:3mm;max-width:100%}
 .ws-figure figcaption{font-size:7.6pt;color:var(--ink-mid);text-align:center;
   margin-top:1.6mm;letter-spacing:.08em}
 
@@ -170,6 +171,13 @@ body{background:#ececea;font-family:var(--sans);color:var(--ink);
   display:flex;flex-direction:column;min-height:0}
 .ws-page--grid .ws-row{flex:1;min-height:0}
 .ws-page--grid .ws-row-main{display:flex;flex-direction:column;min-height:0}
+
+/* 개념 칸에 남는 자리는 초안처럼 필기 줄로 채운다 — 증명 연습 같은 빈 칸이 흰 상자로 남지 않게 */
+.ws-page--grid .ws-concept-main::after{content:"";display:block;flex:1 1 0;min-height:0;
+  margin-top:2.4mm;
+  background:repeating-linear-gradient(to bottom,
+    transparent 0, transparent calc(var(--line-h) - 1px),
+    var(--ink-soft) calc(var(--line-h) - 1px), var(--ink-soft) var(--line-h))}
 
 /* 풀이 여백은 초안이 정한 몫(--split)을 기본으로 갖되, 글이 길면 먼저 양보한다 */
 .ws-page--grid .ws-answer{flex:1 1 calc((1 - var(--split,.5)) * 100%);height:auto;min-height:10mm}
