@@ -1,5 +1,5 @@
 /**
- * 디자인 형식을 고르기 전에 보여 줄 **예시 문서**.
+ * 완성본을 만들기 전에 보여 줄 **예시 문서**.
  *
  * 예시도 실제 완성본과 같은 렌더러(`renderDocument`)를 그대로 타게 한다.
  * 그래야 교사가 본 예시가 곧 이 스튜디오가 뽑아 주는 결과물이 된다.
@@ -13,16 +13,16 @@ const m = (latex: string) => ({ t: 'math' as const, latex });
 /** 예시 도판 — 두 점 A(−2,0), B(0,4)를 지나는 일차함수 그래프 */
 const GRAPH_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 150 128" width="600" height="512">
 <rect width="150" height="128" fill="#fff"/>
-<g stroke="#e8e8e6" stroke-width="1" fill="none">
-<path d="M15 8v104M39 8v104M63 8v104M87 8v104M111 8v104M135 8v104"/>
-<path d="M11 16h132M11 40h132M11 64h132M11 88h132M11 112h132"/></g>
-<g stroke="#1b1b1b" stroke-width="1.5" fill="none">
+<g stroke="#C9C9C9" stroke-width=".8" stroke-dasharray="2.4 2" fill="none">
+<path d="M15 8v104M39 8v104M63 8v104M111 8v104M135 8v104"/>
+<path d="M11 16h132M11 40h132M11 64h132M11 112h132"/></g>
+<g stroke="#1A1A1A" stroke-width="1.3" fill="none">
 <path d="M8 88h136M87 4v118"/></g>
-<path d="M144 88l-4.5-2.6v5.2z" fill="#1b1b1b"/><path d="M87 2l-2.6 4.5h5.2z" fill="#1b1b1b"/>
-<path d="M22 118L132 8" stroke="#1b1b1b" stroke-width="2" fill="none"/>
-<circle cx="39" cy="88" r="2.6" fill="#fff" stroke="#1b1b1b" stroke-width="1.5"/>
-<circle cx="87" cy="40" r="2.6" fill="#fff" stroke="#1b1b1b" stroke-width="1.5"/>
-<g font-family="Georgia,serif" font-style="italic" font-size="8.5" fill="#1b1b1b">
+<path d="M144 88l-4.5-2.6v5.2z" fill="#1A1A1A"/><path d="M87 2l-2.6 4.5h5.2z" fill="#1A1A1A"/>
+<path d="M22 118L132 8" stroke="#1A1A1A" stroke-width="2.6" fill="none"/>
+<circle cx="39" cy="88" r="2.6" fill="#fff" stroke="#1A1A1A" stroke-width="1.5"/>
+<circle cx="87" cy="40" r="2.6" fill="#fff" stroke="#1A1A1A" stroke-width="1.5"/>
+<g font-family="Georgia,serif" font-style="italic" font-size="8.5" fill="#1A1A1A">
 <text x="30" y="100">A</text><text x="92" y="38">B</text>
 <text x="79" y="99" font-size="8">O</text><text x="138" y="100">x</text><text x="92" y="10">y</text></g>
 </svg>`;
