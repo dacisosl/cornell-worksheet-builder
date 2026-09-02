@@ -4,6 +4,9 @@
  * 원칙: 만들어 내지 않는다. 캡처에 있는 글만 옮겨 적고, 그림은 전사하지 않고
  * 위치(bbox)만 받아 나중에 잘라 붙인다. 실패한 캡처는 통째 이미지로 싣는다 —
  * 구멍이 남는 일은 없다.
+ *
+ * 전사 단위는 **칸(블록)**이다. 교사가 한 칸에 붙인 조각들은 초안 배치 그대로
+ * 한 장으로 합쳐 보낸다 — 그래야 조각난 지문이 토막나지 않고 한 문제로 읽힌다.
  */
 
 import { complete, parseJsonLoose, type AiSettings } from '../lib/aiClient';
@@ -11,9 +14,9 @@ import { loadImage } from '../lib/imageProcessing';
 import type { AppState, Block, ImageObj } from '../types';
 import { clampLines, validateItems, type WorksheetItem } from './schema';
 
-/** 한 번의 vision 요청 단위 — 캡처 한 장(또는 한 그룹) */
+/** 한 번의 vision 요청 단위 — 초안 한 칸(블록)의 스냅숏 한 장 */
 export interface CaptureUnit {
-  /** `blockId:imgId` 또는 그룹이면 `blockId:g3` */
+  /** `blockId:cell` — 칸 하나가 캡처 하나다 */
   id: string;
   blockId: number;
   /** 모델에게 보여줄 이미지 dataURL */
@@ -79,19 +82,31 @@ function tagOf(b: Block, idx: number): string {
   return `${base} ${idx + 1}`;
 }
 
-/**
- * 같은 그룹(g)으로 묶인 조각들을 흰 캔버스 위에 원래 배치대로 합성한다.
- * 교사가 묶었다는 건 "이게 한 문제"라는 뜻이므로 한 장으로 만들어 보여 준다.
- */
-async function compositeGroup(imgs: ImageObj[]): Promise<string> {
-  const loaded = await Promise.all(imgs.map(async (im) => ({ im, el: await loadImage(im.src) })));
+/** 화질 보정을 켠 이미지는 보정본으로 — 초안에서 교사가 보는 그대로다. */
+function srcOf(im: ImageObj): string {
+  return im.sharpened && im.sharpSrc ? im.sharpSrc : im.src;
+}
 
-  // 배치는 칸 폭 기준 비율(x, w)과 칸 높이 기준(y)이다. 폭 1000px 캔버스에 편다.
-  const CW = 1000;
+/** 합성 캔버스의 최대 변 길이(px) — 화질과 요청 크기의 균형점 */
+const CELL_MAX_SIDE = 2600;
+
+/**
+ * 한 칸에 붙은 조각들을 흰 캔버스 위에 **초안 배치 그대로** 합성한다.
+ * 교사가 한 칸에 붙였다는 건 "이게 한 덩어리"라는 뜻이다 — 조각을 따로따로
+ * 보여 주면 문제가 토막나므로, 그 칸을 통째로 찍은 것처럼 한 장으로 만든다.
+ */
+async function compositeCell(imgs: ImageObj[], blockId: number): Promise<string> {
+  const loaded = await Promise.all(imgs.map(async (im) => ({ im, el: await loadImage(srcOf(im)) })));
+
+  // 배치는 칸 폭 비율(x, w)과 칸 높이 비율(y)이다. 실제 칸의 치수로 편다.
+  const layer = document.querySelector<HTMLElement>(`.block[data-id="${blockId}"] .img-layer`);
+  const pw = layer?.clientWidth || 1000;
+  const ph = layer?.clientHeight || pw;
+
   const boxes = loaded.map(({ im, el }) => {
-    const w = Math.max(1, im.w * CW);
+    const w = Math.max(1, im.w * pw);
     const h = w * (im.ar || el.naturalHeight / Math.max(1, el.naturalWidth));
-    return { el, x: im.x * CW, y: im.y * CW, w, h };
+    return { el, x: im.x * pw, y: im.y * ph, w, h };
   });
   const minX = Math.min(...boxes.map((b) => b.x));
   const minY = Math.min(...boxes.map((b) => b.y));
@@ -99,22 +114,33 @@ async function compositeGroup(imgs: ImageObj[]): Promise<string> {
   const maxY = Math.max(...boxes.map((b) => b.y + b.h));
 
   const pad = 12;
+  const cw = Math.max(1, maxX - minX + pad * 2);
+  const ch = Math.max(1, maxY - minY + pad * 2);
+
+  // 화면 치수 그대로 그리면 원본보다 작아져 글씨가 뭉갠다 — 가장 촘촘한
+  // 조각이 원본 해상도를 지키는 배율로 키우되, 캔버스가 너무 커지지 않게 막는다.
+  let scale = 1;
+  for (const b of boxes) scale = Math.max(scale, b.el.naturalWidth / b.w);
+  scale = Math.min(scale, 3, CELL_MAX_SIDE / Math.max(cw, ch));
+  scale = Math.max(scale, 0.2);
+
   const c = document.createElement('canvas');
-  c.width = Math.max(1, Math.round(maxX - minX) + pad * 2);
-  c.height = Math.max(1, Math.round(maxY - minY) + pad * 2);
+  c.width = Math.max(1, Math.round(cw * scale));
+  c.height = Math.max(1, Math.round(ch * scale));
   const g = c.getContext('2d');
-  if (!g) return imgs[0].src;
+  if (!g) return srcOf(imgs[0]);
   g.fillStyle = '#ffffff';
   g.fillRect(0, 0, c.width, c.height);
+  g.imageSmoothingQuality = 'high';
   for (const b of boxes) {
-    g.drawImage(b.el, b.x - minX + pad, b.y - minY + pad, b.w, b.h);
+    g.drawImage(b.el, (b.x - minX + pad) * scale, (b.y - minY + pad) * scale, b.w * scale, b.h * scale);
   }
   return c.toDataURL('image/png');
 }
 
 /**
- * 초안을 훑어 캡처 단위를 만든다. 이미지가 없는 칸은 AI를 부르지 않는다 —
- * 교사가 직접 친 글은 이미 정확하므로 그대로 옮긴다.
+ * 초안을 훑어 캡처 단위를 만든다 — 칸 하나가 캡처 하나다. 이미지가 없는 칸은
+ * AI를 부르지 않는다. 교사가 직접 친 글은 이미 정확하므로 그대로 옮긴다.
  */
 export async function collectCaptures(
   state: AppState,
@@ -143,42 +169,19 @@ export async function collectCaptures(
       continue;
     }
 
-    // 그룹으로 묶인 조각은 한 장으로 합쳐 한 문제로 다룬다.
-    const groups = new Map<number, ImageObj[]>();
-    const singles: ImageObj[] = [];
-    for (const im of imgs) {
-      if (im.g != null) {
-        const list = groups.get(im.g) ?? [];
-        list.push(im);
-        groups.set(im.g, list);
-      } else {
-        singles.push(im);
-      }
-    }
-
-    for (const [gid, list] of groups) {
-      const src = list.length > 1 ? await compositeGroup(list) : list[0].src;
-      units.push({
-        id: `${b.id}:g${gid}`,
-        blockId: b.id,
-        src,
-        contextText: text,
-        answerLines: lines,
-        tagLabel: tag,
-        blockType: b.type,
-      });
-    }
-    for (const im of singles) {
-      units.push({
-        id: `${b.id}:${im.id}`,
-        blockId: b.id,
-        src: im.src,
-        contextText: text,
-        answerLines: lines,
-        tagLabel: tag,
-        blockType: b.type,
-      });
-    }
+    // 한 칸의 조각들은 전부 한 장으로 합친다 — 칸이 곧 문제 단위다.
+    // 조각을 따로 보내면 이어지는 지문이 토막나 딴 문제로 읽히기 때문에,
+    // 초안 배치 그대로 합성한 "칸 스냅숏" 하나만 모델에게 보여 준다.
+    const src = imgs.length > 1 ? await compositeCell(imgs, b.id) : srcOf(imgs[0]);
+    units.push({
+      id: `${b.id}:cell`,
+      blockId: b.id,
+      src,
+      contextText: text,
+      answerLines: lines,
+      tagLabel: tag,
+      blockType: b.type,
+    });
   }
 
   return { units, textOnly };
@@ -199,6 +202,10 @@ function itemsFromText(b: Block, text: string, lines: number): WorksheetItem[] {
 }
 
 export const EXTRACT_SYSTEM = `당신은 교과서 캡처 이미지를 학습지로 옮겨 적는 편집자다.
+
+이미지는 학습지 한 칸을 통째로 찍은 것이다. 교사가 여러 캡처 조각을 이어 붙여
+만든 칸일 수 있다 — 조각 경계는 무시하고, 배치 순서(위→아래, 왼쪽→오른쪽)대로
+읽어 **이어지는 글은 한 문제로 합쳐** 전사한다. 조각 하나를 문제 하나로 착각하지 마라.
 
 절대 규칙
 - 이미지에 보이는 글을 **그대로 전사**한다. 요약·의역·문제 창작·정답 추가는 절대 금지다.
@@ -224,7 +231,7 @@ function userPrompt(unit: CaptureUnit): string {
   const ctx = unit.contextText
     ? `\n\n참고 — 교사가 이 칸에 직접 적어 둔 글(전사 대상 아님, 문맥용):\n${unit.contextText}`
     : '';
-  return `이 캡처를 전사하세요. 풀이칸은 약 ${unit.answerLines}줄로 잡습니다.${ctx}`;
+  return `학습지 한 칸을 통째로 찍은 캡처입니다. 배치 순서대로 읽어 문제 단위로 전사하세요. 풀이칸은 약 ${unit.answerLines}줄로 잡습니다.${ctx}`;
 }
 
 /** 캡처 한 장을 전사한다. 실패하면 이미지 폴백을 돌려준다. */

@@ -34,7 +34,8 @@ import { THEME_ORDER, THEMES, isThemeName, type ThemeName } from './themes';
 
 import './studio.css';
 
-const STORE_KEY = 'cornell-studio-v1';
+// v2: 캡처 단위가 이미지별에서 칸별로 바뀌어 v1 저장본의 도판 출처가 맞지 않는다.
+const STORE_KEY = 'cornell-studio-v2';
 
 export interface StudioContext {
   state: AppState;
@@ -122,7 +123,7 @@ function createSession(ctx: StudioContext): Session {
   /* ── 뼈대 ─────────────────────────────────────────────── */
 
   const frame = el('iframe', { title: '완성본 미리보기' });
-  /* 예시임을 못 알아볼 수 없게 — iframe 바깥에 겹쳐서 흐림에 같이 먹지 않는다 */
+  /* 예시임을 못 알아볼 수 없게 — 문서는 또렷하게 두고 은은한 워터마크만 겹친다 */
   const mark = el('div', { class: 'st-mark', 'aria-hidden': 'true' });
   for (let i = 0; i < 15; i += 1) mark.appendChild(el('span', { text: '예시 SAMPLE' }));
   /* 배율은 여기서 건다 — iframe 자체는 늘 A4 실치수(210×297mm)다 */
@@ -302,6 +303,19 @@ function createSession(ctx: StudioContext): Session {
     onclick: () => void run(),
   }) as HTMLButtonElement;
 
+  const stopBtn = el('button', {
+    class: 'st-btn wide',
+    text: '중지',
+    title: '만들기를 멈춥니다. 이미 만들어 둔 완성본이 있으면 그대로 남습니다.',
+    onclick: () => {
+      if (!abort) return;
+      stopBtn.disabled = true;
+      stopBtn.textContent = '멈추는 중…';
+      abort.abort();
+    },
+  }) as HTMLButtonElement;
+  stopBtn.style.display = 'none';
+
   const noteLine = el('p', { class: 'hint' });
   function note(msg: string): void {
     noteLine.textContent = msg;
@@ -319,6 +333,7 @@ function createSession(ctx: StudioContext): Session {
       el('label', { text: '모델' }),
       el('div', { class: 'st-row' }, [modelSel, loadModelsBtn]),
       runBtn,
+      stopBtn,
       noteLine,
     ]),
     progressBox,
@@ -334,6 +349,11 @@ function createSession(ctx: StudioContext): Session {
   function syncRun(): void {
     runBtn.disabled = running || !activeKey(settings);
     runBtn.textContent = running ? '만드는 중…' : doc ? '다시 만들기' : '완성본 만들기';
+    stopBtn.style.display = running ? '' : 'none';
+    if (!running) {
+      stopBtn.disabled = false;
+      stopBtn.textContent = '중지';
+    }
     printBtn.disabled = !doc || showingSample;
     saveBtn.disabled = !doc || showingSample;
     closeBtn.textContent = running ? '접어 두기' : '닫기';
@@ -454,6 +474,14 @@ function createSession(ctx: StudioContext): Session {
           )
         : [];
 
+      // 교사가 중지를 눌렀다 — 반쯤 된 결과는 버리고, 있던 완성본은 그대로 지킨다.
+      if (abort.signal.aborted) {
+        failures = [];
+        progressBox.style.display = 'none';
+        note(doc ? '중지했습니다. 이전 완성본은 그대로 남아 있습니다.' : '중지했습니다.');
+        return;
+      }
+
       doc = buildDoc([...textOnly, ...results]);
       overrides = {};
       setProgress(1, 1, '도판을 다듬는 중…');
@@ -554,7 +582,7 @@ function createSession(ctx: StudioContext): Session {
     if (doc) render(doc, false);
   }
 
-  /** 미리보기에 문서 한 편을 띄운다. 예시는 흐림·워터마크가 붙고 고칠 수 없다. */
+  /** 미리보기에 문서 한 편을 띄운다. 예시는 워터마크가 붙고 고칠 수 없다. */
   function render(target: PolishedDoc, sample: boolean): void {
     showingSample = sample;
     empty.remove();
@@ -599,8 +627,6 @@ function createSession(ctx: StudioContext): Session {
     stage.style.setProperty('--k', String(k));
     stage.style.width = `${Math.round(pw * k)}px`;
     stage.style.height = `${Math.round(ph * k)}px`;
-    // filter는 scale 이전 좌표계라 화면에서는 k배로 얇아진다 — 되돌려 준다.
-    stage.style.setProperty('--sample-blur', `${(1.8 / k).toFixed(2)}px`);
   }
 
   new ResizeObserver(() => applyZoom()).observe(view);
