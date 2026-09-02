@@ -401,13 +401,25 @@ function boxItemsHtml(
   noMark: boolean,
 ): string {
   const anchored = anchorsUsable(items.map((x) => x.item));
+  // 앵커 자리의 높이: 모델이 잰 bbox 보다 **다음 아이템 직전(또는 칸 바닥)까지** 넓게 준다.
+  // 윗변은 그대로라 자리가 바뀌지 않고, 빈 여백을 쓸 수 있어 글씨를 덜 줄인다.
+  const roomOf = new Map<WorksheetItem, number>();
+  if (anchored) {
+    const ys = items.map(({ item }) => item.bbox![1]).sort((a, b) => a - b);
+    for (const { item } of items) {
+      const [, y, , h] = item.bbox!;
+      const next = ys.find((v) => v > y + 0.005);
+      const bottom = next === undefined ? 1 : next - 0.008;
+      roomOf.set(item, Math.min(1 - y, Math.max(h, bottom - y)));
+    }
+  }
   const parts = items.map(({ item, idx }) => {
     if (item.kind === 'problem') numbering.n += 1;
     const place: Place = { bbox: anchored ? item.bbox : undefined };
     if (item.kind === 'image') return imageHtml(item, place);
     const html = itemHtml(item, numbering.n, `s${si}.i${idx}`, opts, place, noMark);
     if (!anchored) return html;
-    return `<div class="ws-slot" style="top:${pct(item.bbox![1])};height:${pct(item.bbox![3])}" data-fit><div class="ws-fitin">${html}</div></div>`;
+    return `<div class="ws-slot" style="top:${pct(item.bbox![1])};height:${pct(roomOf.get(item) ?? item.bbox![3])}" data-fit><div class="ws-fitin">${html}</div></div>`;
   });
   const cls = anchored ? 'ws-boxin ws-boxin--anchored' : 'ws-boxin ws-fitin';
   return `<div class="${cls}">${parts.join('\n')}</div>`;
@@ -526,26 +538,35 @@ body{display:block;padding:14px 0}
  */
 const FIT_SCRIPT = `<script>
 (function(){
-  var FLOOR = 0.78;
-  function shrink(cell, box){
-    var k = 1;
-    box.style.zoom = '';
-    while(box.scrollHeight > cell.clientHeight + 1 && k > FLOOR){
-      k = Math.round((k - 0.04) * 100) / 100;
-      box.style.zoom = k;
+  /* 칸에 맞추기 — 줄 간격·여백(--sp)을 먼저 좁히고, 모자라면 글씨(--fs)를 줄인다.
+     그림은 칸 폭 대비 비율로 앉아 있어 이 값들에 영향받지 않는다. */
+  var STEPS = [];
+  [1, .85, .7, .55].forEach(function(sp){ STEPS.push([sp, 1]); });
+  [.96, .92, .88, .84, .8, .76, .72, .68, .64, .6].forEach(function(fs){ STEPS.push([.55, fs]); });
+  function avail(cell){
+    var cs = getComputedStyle(cell);
+    return cell.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+  }
+  function over(cell, box, h){
+    return box.scrollHeight > h + 1 || box.scrollWidth > cell.clientWidth + 1;
+  }
+  function fitOne(cell){
+    var box = cell.querySelector(':scope > .ws-fitin');
+    if(!box) return;
+    cell.style.removeProperty('--sp');
+    cell.style.removeProperty('--fs');
+    cell.classList.remove('ws-tight', 'ws-clip');
+    var h = avail(cell);
+    if(!over(cell, box, h)) return;
+    for(var i = 0; i < STEPS.length; i += 1){
+      cell.style.setProperty('--sp', STEPS[i][0]);
+      cell.style.setProperty('--fs', STEPS[i][1]);
+      if(!over(cell, box, h)) break;
     }
-    return k;
+    cell.classList.add('ws-tight');
+    cell.classList.toggle('ws-clip', over(cell, box, h));
   }
-  function fit(){
-    document.querySelectorAll('[data-fit]').forEach(function(cell){
-      var box = cell.querySelector(':scope > .ws-fitin');
-      if(!box) return;
-      cell.classList.remove('ws-clip');
-      var k = shrink(cell, box);
-      cell.classList.toggle('ws-tight', k < 1);
-      cell.classList.toggle('ws-clip', box.scrollHeight > cell.clientHeight + 1);
-    });
-  }
+  function fit(){ document.querySelectorAll('[data-fit]').forEach(fitOne); }
   if(document.readyState === 'complete') fit();
   else window.addEventListener('load', fit);
   window.addEventListener('beforeprint', fit);

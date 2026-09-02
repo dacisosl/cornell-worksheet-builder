@@ -791,7 +791,7 @@ function createSession(ctx: StudioContext): Session {
     window.setTimeout(() => {
       const clipped = d.querySelectorAll('.ws-clip').length;
       if (clipped > 0) {
-        note(`칸 ${clipped}개는 글이 많아 일부가 가려졌습니다. 초안에서 그 칸을 키운 뒤 다시 만들어 주세요.`);
+        note(`칸 ${clipped}개는 글씨와 간격을 줄여도 다 들어가지 않아 일부가 가려졌습니다. 초안에서 그 칸을 키운 뒤 다시 만들어 주세요.`);
       }
     }, 400);
   }

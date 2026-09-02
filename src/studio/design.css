@@ -204,7 +204,22 @@ body{background:#ececea;font-family:var(--sans);color:var(--ink);
 
 /* 칸 안에서는 아이템이 위아래 여백을 스스로 만들지 않는다 — 칸이 곧 여백이다 */
 .ws-page--abs .ws-item{margin-top:0}
-.ws-page--abs .ws-boxin:not(.ws-boxin--anchored) .ws-item + .ws-item{margin-top:3mm}
+.ws-page--abs .ws-boxin:not(.ws-boxin--anchored) .ws-item + .ws-item{margin-top:calc(3mm * var(--sp, 1))}
+
+/* 반응형 맞춤 — 칸이 글보다 작으면 FIT_SCRIPT 가 --sp(줄 간격·여백) 를 먼저, 그다음 --fs(글씨 크기) 를
+   줄여 칸 안에 넣는다. 그림은 칸 폭 대비 비율로 앉아 있어 크기가 바뀌지 않는다. */
+.ws-page--abs [data-fit]{--fs:1;--sp:1;--lh:calc(1.72 - (1 - var(--sp)) * .8)}
+.ws-page--abs .ws-fitin :is(.ws-stem,.ws-concept-body,.ws-subq){font-size:calc(10.6pt * var(--fs));line-height:var(--lh)}
+.ws-page--abs .ws-fitin .ws-choices{font-size:calc(10.6pt * var(--fs));line-height:calc(var(--lh) - .2);
+  margin-top:calc(2.6mm * var(--sp));padding-top:calc(2.2mm * var(--sp));gap:calc(1.6mm * var(--sp)) 3mm}
+.ws-page--abs .ws-fitin .ws-subqs{font-size:calc(10.6pt * var(--fs));margin-top:calc(2.6mm * var(--sp));gap:calc(1.8mm * var(--sp))}
+.ws-page--abs .ws-fitin .ws-note{font-size:calc(10.4pt * var(--fs));line-height:var(--lh);
+  margin-top:calc(3mm * var(--sp));padding:calc(2.8mm * var(--sp)) 3.4mm}
+.ws-page--abs .ws-fitin .ws-display{margin:calc(3mm * var(--sp)) 0}
+.ws-page--abs .ws-fitin .ws-note .ws-display{margin:calc(2.2mm * var(--sp)) 0}
+.ws-page--abs .ws-fitin .ws-figure--block{margin-top:calc(2mm * var(--sp))}
+.ws-page--abs .ws-fitin .ws-figure--wide{margin-top:calc(3.5mm * var(--sp))}
+.ws-page--abs .ws-fitin :is(.ws-figure--float-r,.ws-figure--float-l){margin-bottom:calc(2mm * var(--sp))}
 .ws-page--abs .ws-problem{margin-top:0}
 /* 풀이 줄은 풀이칸 박스가 맡는다 */
 .ws-page--abs .ws-answer{display:none}
@@ -223,7 +238,7 @@ body{background:#ececea;font-family:var(--sans);color:var(--ink);
   .ws-tight::after{content:"칸에 맞춰 줄임";position:absolute;right:0;bottom:0;
     font-size:6.4pt;letter-spacing:.06em;color:#c08a2e;opacity:.75;z-index:2}
   .ws-clip{outline:1.2px dashed #d4553c;outline-offset:-1px}
-  .ws-clip::after{content:"칸이 작아 일부가 가려짐";color:#d4553c;opacity:1;font-weight:700}
+  .ws-clip::after{content:"글씨를 줄여도 칸이 작아 일부가 가려짐";color:#d4553c;opacity:1;font-weight:700}
 }
 
 /* ── 다시 그린 도판(SVG) — 잘라낸 그림과 같은 비율의 상자에 앉아 자리가 같다 ── */
