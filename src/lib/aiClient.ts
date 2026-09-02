@@ -58,7 +58,8 @@ export const CURATED_MODELS: Record<Provider, CuratedModel[]> = {
   ],
 };
 
-const CURATED_CACHE_KEY = 'cornell-ai-curated-v1';
+// v2: 배치 전용·비전 미지원 모델이 섞여 있던 캐시를 버린다.
+const CURATED_CACHE_KEY = 'cornell-ai-curated-v2';
 const CURATED_TTL_MS = 24 * 60 * 60 * 1000;
 
 interface OpenRouterModel {
@@ -66,10 +67,24 @@ interface OpenRouterModel {
   name?: string;
   created?: number;
   pricing?: { prompt?: string; completion?: string };
+  /** 최신 형식: input_modalities, 구형: modality('text+image->text') */
+  architecture?: { input_modalities?: string[]; modality?: string };
 }
 
-/** 이름에 이런 말이 들어간 변형은 학습지 저작용 추천에서 뺀다 */
-const EXCLUDE = /(:free|:extended|-fast|realtime|audio|image|search|distill|exp)/i;
+/**
+ * 이름에 이런 말이 들어간 변형은 학습지 저작용 추천에서 뺀다.
+ * batch/async 는 일반 호출이 막혀 있어(대량처리 전용) 부르면 404가 난다.
+ */
+const EXCLUDE = /(:free|:extended|-fast|realtime|audio|image|search|distill|exp|batch|async)/i;
+
+/** 캡처를 읽어야 하므로 그림을 볼 수 있는 모델만 추천한다 */
+function seesImages(m: OpenRouterModel): boolean {
+  const mods = m.architecture?.input_modalities;
+  if (Array.isArray(mods)) return mods.includes('image');
+  const legacy = m.architecture?.modality;
+  // 정보가 없으면 막지 않는다 — 목록이 통째로 비는 것보다 낫다.
+  return typeof legacy === 'string' ? legacy.includes('image') : true;
+}
 
 /**
  * OpenRouter 공개 목록에서 주요 3사(구글·오픈AI·앤트로픽)의 **최신 모델**을 뽑아
@@ -93,7 +108,7 @@ export async function fetchLatestCurated(): Promise<CuratedModel[] | null> {
     const body = (await res.json()) as { data?: OpenRouterModel[] };
     const models = (body.data ?? []).filter(
       (m): m is Required<Pick<OpenRouterModel, 'id'>> & OpenRouterModel =>
-        !!m.id && !EXCLUDE.test(m.id),
+        !!m.id && !EXCLUDE.test(m.id) && seesImages(m),
     );
 
     const families: { prefix: string; take: number; note: string }[] = [
@@ -144,10 +159,15 @@ export function loadSettings(): AiSettings {
     const raw = localStorage.getItem(AI_KEY);
     if (!raw) return base;
     const p = JSON.parse(raw) as Partial<AiSettings>;
+    const models = { ...base.models, ...(p.models ?? {}) };
+    // 대량처리 전용 모델이 골라져 있으면 부를 때마다 404가 난다 — 기본으로 되돌린다.
+    for (const k of Object.keys(models) as Provider[]) {
+      if (/batch|async/i.test(models[k])) models[k] = DEFAULT_MODELS[k];
+    }
     return {
       provider: p.provider === 'gemini' ? 'gemini' : 'openrouter',
       keys: { ...base.keys, ...(p.keys ?? {}) },
-      models: { ...base.models, ...(p.models ?? {}) },
+      models,
     };
   } catch {
     return base;
@@ -170,8 +190,48 @@ export function activeModel(s: AiSettings): string {
   return (s.models[s.provider] || DEFAULT_MODELS[s.provider]).trim();
 }
 
-/** 응답 본문에서 읽을 만한 오류 메시지를 뽑아낸다. */
-async function errorText(res: Response): Promise<string> {
+/**
+ * 모델·키 자체가 문제라 **다시 시도해도 똑같이 실패하는** 오류.
+ * 캡처마다 되풀이해 부르지 않고 한 번에 멈추라는 신호다.
+ */
+export class ModelError extends Error {
+  readonly detail: string;
+  constructor(message: string, detail: string) {
+    super(message);
+    this.name = 'ModelError';
+    this.detail = detail;
+  }
+}
+
+/** 제공자 오류를 교사가 바로 알아듣는 한국어 안내로 옮긴다 */
+function explain(status: number, detail: string): { message: string; fatal: boolean } {
+  const d = detail.toLowerCase();
+  if (d.includes('batch')) {
+    return {
+      message: '이 모델은 대량처리(Batch) 전용이라 학습지 전사에 쓸 수 없습니다. 다른 모델을 골라 주세요.',
+      fatal: true,
+    };
+  }
+  if (status === 404 || d.includes('no endpoints') || d.includes('not found')) {
+    return { message: '고른 모델을 찾을 수 없습니다. 모델 목록에서 다른 모델을 골라 주세요.', fatal: true };
+  }
+  if (status === 401 || status === 403) {
+    return { message: 'API 키가 거부됐습니다. 키를 다시 확인해 주세요.', fatal: true };
+  }
+  if (status === 402 || d.includes('credit') || d.includes('quota') || d.includes('billing')) {
+    return { message: '제공자 잔액·사용량 한도에 걸렸습니다. 결제 상태를 확인해 주세요.', fatal: true };
+  }
+  if (d.includes('image') && (d.includes('support') || d.includes('modality'))) {
+    return { message: '이 모델은 그림을 읽지 못합니다. 이미지를 볼 수 있는 모델을 골라 주세요.', fatal: true };
+  }
+  if (status === 429) {
+    return { message: '요청이 너무 잦습니다. 잠시 뒤 다시 시도해 주세요.', fatal: false };
+  }
+  return { message: `요청이 거부됐습니다 (${status}).`, fatal: false };
+}
+
+/** 응답 본문에서 읽을 만한 오류 메시지를 뽑아 알맞은 오류로 만든다. */
+async function errorOf(res: Response): Promise<Error> {
   let detail = '';
   try {
     const body = (await res.json()) as { error?: { message?: string } | string };
@@ -180,14 +240,16 @@ async function errorText(res: Response): Promise<string> {
   } catch {
     /* JSON이 아니면 상태코드만 */
   }
-  return `${res.status} ${res.statusText}${detail ? ' — ' + detail : ''}`;
+  const { message, fatal } = explain(res.status, detail);
+  const full = detail ? `${message} (${detail})` : message;
+  return fatal ? new ModelError(message, detail) : new Error(full);
 }
 
 /** 제공자가 지원하는 모델 목록 (설정 화면의 '모델 불러오기') */
 export async function listModels(provider: Provider, key: string): Promise<string[]> {
   if (provider === 'openrouter') {
     const res = await fetch('https://openrouter.ai/api/v1/models');
-    if (!res.ok) throw new Error(await errorText(res));
+    if (!res.ok) throw await errorOf(res);
     const body = (await res.json()) as { data?: { id?: string }[] };
     return (body.data ?? [])
       .map((m) => m.id ?? '')
@@ -199,7 +261,7 @@ export async function listModels(provider: Provider, key: string): Promise<strin
   const res = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(key)}`,
   );
-  if (!res.ok) throw new Error(await errorText(res));
+  if (!res.ok) throw await errorOf(res);
   const body = (await res.json()) as {
     models?: { name?: string; supportedGenerationMethods?: string[] }[];
   };
@@ -258,7 +320,7 @@ export async function complete(s: AiSettings, opts: CompleteOpts): Promise<strin
         ],
       }),
     });
-    if (!res.ok) throw new Error(await errorText(res));
+    if (!res.ok) throw await errorOf(res);
     const body = (await res.json()) as {
       choices?: { message?: { content?: string } }[];
       error?: { message?: string };
@@ -296,7 +358,7 @@ export async function complete(s: AiSettings, opts: CompleteOpts): Promise<strin
       }),
     },
   );
-  if (!res.ok) throw new Error(await errorText(res));
+  if (!res.ok) throw await errorOf(res);
   const body = (await res.json()) as {
     candidates?: { content?: { parts?: { text?: string }[] }; finishReason?: string }[];
     promptFeedback?: { blockReason?: string };

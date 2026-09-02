@@ -9,7 +9,7 @@
  * 모델이 돌려주는 bbox(0~1)가 곧 패널 안 자리가 된다 — 완성본은 그 자리에 그대로 앉힌다.
  */
 
-import { complete, parseJsonLoose, type AiSettings } from '../lib/aiClient';
+import { complete, ModelError, parseJsonLoose, type AiSettings } from '../lib/aiClient';
 import type { AppState, Block, ImageObj } from '../types';
 import { validateItems, type Rect, type WorksheetItem } from './schema';
 import { compositePanel, cropPanel, within, type Bake, type ImgBox, type PanelKey } from './snapshot';
@@ -34,6 +34,8 @@ export interface CaptureResult {
   /** 전사에 실패해 이미지로 폴백했는지 */
   failed: boolean;
   error?: string;
+  /** 모델·키 문제라 다시 시도해도 같은 결과 — 남은 캡처는 부르지 않는다 */
+  fatal?: boolean;
 }
 
 function plainText(html: string): string {
@@ -170,11 +172,12 @@ export async function extractOne(
   unit: CaptureUnit,
   signal?: AbortSignal,
 ): Promise<CaptureResult> {
-  const fallback = (error: string): CaptureResult => ({
+  const fallback = (error: string, fatal = false): CaptureResult => ({
     unit,
     items: [{ kind: 'image', from: unit.id, bbox: [0, 0, 1, 1] }],
     failed: true,
     error,
+    fatal,
   });
 
   try {
@@ -196,6 +199,8 @@ export async function extractOne(
     if (!items) return fallback('전사 내용이 비었거나 형식이 어긋납니다. 이미지로 넣었습니다.');
     return { unit, items, failed: false };
   } catch (e) {
+    // 모델·키 문제면 캡처를 아무리 다시 보내도 같은 답이 온다 — 한 번만 알리고 멈춘다.
+    if (e instanceof ModelError) return fallback(e.message, true);
     const msg = e instanceof Error ? e.message : String(e);
     return fallback(`전사에 실패했습니다 — ${msg}`);
   }
@@ -245,12 +250,17 @@ export async function extractAll(
   const results: CaptureResult[] = new Array(units.length);
   let next = 0;
   let done = 0;
+  /** 모델·키 문제로 멈췄다면 그 사유 — 남은 캡처는 부르지 않고 같은 사유로 처리한다 */
+  let fatal: string | null = null;
 
   async function worker(): Promise<void> {
     while (next < units.length) {
       if (signal?.aborted) return;
       const i = next++;
-      const r = await extractOne(settings, units[i], signal);
+      const r = fatal
+        ? { unit: units[i], items: [{ kind: 'image' as const, from: units[i].id, bbox: [0, 0, 1, 1] as Rect }], failed: true, error: fatal, fatal: true }
+        : await extractOne(settings, units[i], signal);
+      if (r.fatal && !fatal) fatal = r.error ?? '모델을 쓸 수 없습니다.';
       results[i] = r;
       done += 1;
       onProgress(done, units.length, r);

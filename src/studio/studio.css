@@ -102,3 +102,7 @@
   border:1px solid #dcdcd8;background:#fff;cursor:pointer;color:#4a4a46;white-space:nowrap}
 .st-tab:hover{border-color:#a8a8a4}
 .st-tab[aria-pressed=true]{background:#1b1b1b;border-color:#1b1b1b;color:#fff}
+/* 모델·키 문제 — 캡처별로 되풀이하지 않고 한 줄로 알린다 */
+.st-fail--model{border-top:0;background:#fdf1ec;border:1px solid #f0c8b8;border-radius:8px;
+  padding:9px 11px;margin-top:8px}
+.st-fail--model div{color:#8a4a33;font-weight:600;word-break:keep-all}
