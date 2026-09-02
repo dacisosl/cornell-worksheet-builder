@@ -39,4 +39,4 @@ body{background:#e8e6e0}
 .ws-figure{border-radius:2mm;border-color:var(--ink);border-width:.3mm}
 
 .ws-concept{border-radius:3.5mm;border-color:var(--ink);overflow:hidden}
-.ws-concept-term{background:var(--ink);color:#fff;border-right:0}
+.ws-concept-term{display:inline-block;background:var(--ink);color:#fff;border-radius:99px;padding:.9mm 4mm 1.1mm}

@@ -68,14 +68,11 @@ body{background:#ececea;font-family:var(--sans);color:var(--ink);
 .ws-foot-line{flex:1;border-top:1px solid var(--ink-soft)}
 .ws-foot .pg{font-variant-numeric:tabular-nums}
 
-/* ── 개념 정리 박스: 용어(24mm) | 정의 ── */
-.ws-concept{margin-top:5mm;border:.35mm solid var(--ink);
-  display:grid;grid-template-columns:24mm 1fr}
-.ws-concept-term{background:var(--tint);border-right:.25mm solid var(--ink-soft);
-  padding:2.8mm 2mm;font-size:10.4pt;font-weight:700;line-height:1.4;
-  display:flex;align-items:center;justify-content:center;text-align:center}
-.ws-concept-main{padding:2.8mm 3.4mm;min-width:0;display:flex;flex-direction:column}
-.ws-concept-body{font-size:10.6pt;font-weight:400;line-height:1.55}
+/* ── 개념 정리 박스: 용어는 본문 위에 굵게 ── */
+.ws-concept{margin-top:5mm;border:.35mm solid var(--ink);display:block;padding:3mm 3.6mm 3.4mm}
+.ws-concept-term{font-size:10.6pt;font-weight:700;line-height:1.4;margin-bottom:1.8mm}
+.ws-concept-main{min-width:0;display:flex;flex-direction:column}
+.ws-concept-body{font-size:10.6pt;font-weight:400;line-height:1.72}
 .ws-concept-body b{font-weight:700}
 
 /* ── 문항: 6.2mm 검정 정사각 번호, 본문은 마크 폭(8.7mm)만큼 들여쓰기 ── */
@@ -91,7 +88,7 @@ body{background:#ececea;font-family:var(--sans);color:var(--ink);
 .ws-marktag{display:block;font-size:6.5pt;font-weight:700;letter-spacing:.04em;
   color:var(--ink);margin-top:1.2mm;width:8.7mm;text-align:left;line-height:1.3}
 
-.ws-stem{font-size:10.6pt;font-weight:400;line-height:1.55}
+.ws-stem{font-size:10.6pt;font-weight:400;line-height:1.72}
 .ws-stem u{text-decoration-thickness:.3mm;text-underline-offset:1.5px}
 
 /* 객관식 보기 — 한 줄 다섯, 하단 하이라인으로 발문과 구분 */
@@ -103,7 +100,7 @@ body{background:#ececea;font-family:var(--sans);color:var(--ink);
 
 /* 소문항 (1)(2) — 번호 굵게 */
 .ws-subqs{margin-top:2.6mm;display:grid;gap:1.8mm;font-size:10.6pt}
-.ws-subq{display:flex;gap:2mm;align-items:baseline;line-height:1.55}
+.ws-subq{display:flex;gap:2mm;align-items:baseline;line-height:1.72}
 .ws-subq b{font-weight:700}
 
 /* ── 도판 — 하이라인 패널, 캡션은 회색 ── */
@@ -112,7 +109,7 @@ body{background:#ececea;font-family:var(--sans);color:var(--ink);
 .ws-figure{border:.25mm solid var(--ink-soft);padding:2.4mm;background:var(--paper)}
 .ws-figure img{width:100%;height:auto;display:block}
 .ws-figure--side{flex:0 0 min(76mm,42%);min-width:0}
-.ws-figure--wide{margin-top:3mm;max-width:100%}
+.ws-figure--wide{margin:3.5mm auto 0;max-width:min(76mm,72%)}
 /* 초안 자리를 아는 도판: 문제 영역 대비 폭·위치 그대로 */
 .ws-figure--block{display:block;margin-top:2mm;max-width:100%}
 .ws-figure--float-r{float:right;margin:0 0 2mm 3mm}
@@ -135,12 +132,28 @@ body{background:#ececea;font-family:var(--sans);color:var(--ink);
   display:flex;flex-direction:column;min-height:0}
 .ws-page:not(.ws-page--abs) .ws-doc > .ws-problem:last-of-type .ws-answer{flex:1}
 
-/* ── 수식 — 본문의 1.08배, 인라인 수식은 줄바꿈 금지 ── */
+/* ── 수식 ────────────────────────────────────────────────
+   문장 안 수식은 본문의 1.08배로 흐름을 따르고, 원문에서 한 줄을 차지하던 수식은
+   줄을 끊고 가운데 크게 앉힌다 — 분수·등식이 문장에 눌리지 않게. */
+.ws-display{margin:3mm 0;text-align:center}
+.ws-display .katex-display{margin:0}
+.ws-display .katex{font-size:1.3em}
+/* 인용 박스 안에서는 조금 작게 — 박스가 좁다 */
+.ws-note .ws-display{margin:2.2mm 0}
+.ws-note .ws-display .katex{font-size:1.18em}
+
+/* 원문에서 테두리·색 상자로 묶여 있던 글 (풀이 과정 등) */
+.ws-note{margin-top:3mm;padding:2.8mm 3.4mm;background:#F6F5F2;
+  border:.25mm solid var(--ink-soft);font-size:10.4pt;line-height:1.72}
+.ws-note > .ws-display:first-child{margin-top:0}
+.ws-note > .ws-display:last-child{margin-bottom:0}
+
 .katex{font-size:1.08em}
 .ws-stem .katex,.ws-concept-body .katex,.ws-choice .katex,.ws-subq .katex{white-space:nowrap}
 .katex-display{margin:2mm 0}
-/* 빈칸(\boxed) — 테두리 1px, 안쪽 흰색 */
-.katex .fbox,.katex .boxpad{border-color:var(--ink)}
+/* 빈칸(\boxed) — 또렷한 네모, 안쪽 흰색. 학생이 답을 써 넣는 자리다. */
+.katex .fbox{border-color:var(--ink);border-width:.7px;background:var(--paper);border-radius:.4mm}
+.katex .boxpad{padding:.12em .1em}
 
 /* 모델이 확신하지 못한 어절 — 화면에서만, 인쇄에는 안 나온다 */
 .ws-uncertain{background:rgba(255,214,0,.42);border-radius:2px;padding:0 .3mm}

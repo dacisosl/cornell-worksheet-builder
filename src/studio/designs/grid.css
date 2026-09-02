@@ -35,4 +35,4 @@ body{background:#e4e4e4}
 .ws-figure{border-color:var(--ink);border-width:.3mm}
 
 .ws-concept{border-width:.6mm}
-.ws-concept-term{border-right:.5mm solid var(--ink)}
+.ws-concept-term{border-bottom:.4mm solid var(--ink);padding-bottom:1.4mm;letter-spacing:.02em}

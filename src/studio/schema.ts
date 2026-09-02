@@ -12,8 +12,11 @@
 /** [x, y, w, h] — 어떤 기준 사각형 대비 0..1 비율 */
 export type Rect = [number, number, number, number];
 
-/** 글 조각 — 보통 텍스트이거나 수식이다. */
-export type Run = { t: 'text'; s: string } | { t: 'math'; latex: string };
+/**
+ * 글 조각 — 보통 텍스트이거나 수식이다.
+ * 수식이 원문에서 **별도 줄 가운데**에 크게 놓여 있었으면 display 다 — 조판도 그렇게 앉힌다.
+ */
+export type Run = { t: 'text'; s: string } | { t: 'math'; latex: string; display?: boolean };
 
 /** 캡처 안에서 잘라낼 그림 영역 */
 export interface FigureRef {
@@ -43,6 +46,8 @@ export interface ProblemItem {
   /** (1) (2) 같은 소문항 */
   subqs?: Run[][];
   figures?: FigureRef[];
+  /** 원문에서 테두리·음영 박스로 묶여 있던 글 (풀이 과정 등) — 인용 박스로 앉힌다 */
+  note?: Run[];
   /** 이 문제가 캡처에서 차지한 영역 — 있으면 그 자리에 앉힌다 */
   bbox?: Rect;
   /** 풀이칸 줄 수 — 흐름 조판(예시)에서만 쓴다 */
@@ -58,6 +63,8 @@ export interface ConceptItem {
   title?: string;
   body: Run[];
   figures?: FigureRef[];
+  /** 원문에서 테두리·음영 박스로 묶여 있던 글 */
+  note?: Run[];
   bbox?: Rect;
 }
 
@@ -114,7 +121,8 @@ function asRuns(raw: unknown): Run[] | null {
     if (!r || typeof r !== 'object') return null;
     const o = r as Record<string, unknown>;
     if (o.t === 'text' && typeof o.s === 'string') out.push({ t: 'text', s: o.s });
-    else if (o.t === 'math' && typeof o.latex === 'string') out.push({ t: 'math', latex: o.latex });
+    else if (o.t === 'math' && typeof o.latex === 'string')
+      out.push({ t: 'math', latex: o.latex, display: o.display === true });
     else return null;
   }
   return out;
@@ -210,6 +218,7 @@ export function validateItems(raw: unknown, from: string): WorksheetItem[] | nul
         title: typeof o.title === 'string' ? o.title : undefined,
         body,
         figures: asFigures(o.figures, from),
+        note: asRuns(o.note) ?? undefined,
         bbox,
       });
       continue;
@@ -225,6 +234,7 @@ export function validateItems(raw: unknown, from: string): WorksheetItem[] | nul
         choices: asRunsList(o.choices),
         subqs: asRunsList(o.subqs),
         figures: asFigures(o.figures, from),
+        note: asRuns(o.note) ?? undefined,
         bbox,
         answerLines: clampLines(o.answerLines, 4),
         uncertain: asStrings(o.uncertain),
