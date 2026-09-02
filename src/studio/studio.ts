@@ -303,6 +303,19 @@ function createSession(ctx: StudioContext): Session {
     onclick: () => void run(),
   }) as HTMLButtonElement;
 
+  const stopBtn = el('button', {
+    class: 'st-btn wide',
+    text: '중지',
+    title: '만들기를 멈춥니다. 이미 만들어 둔 완성본이 있으면 그대로 남습니다.',
+    onclick: () => {
+      if (!abort) return;
+      stopBtn.disabled = true;
+      stopBtn.textContent = '멈추는 중…';
+      abort.abort();
+    },
+  }) as HTMLButtonElement;
+  stopBtn.style.display = 'none';
+
   const noteLine = el('p', { class: 'hint' });
   function note(msg: string): void {
     noteLine.textContent = msg;
@@ -320,6 +333,7 @@ function createSession(ctx: StudioContext): Session {
       el('label', { text: '모델' }),
       el('div', { class: 'st-row' }, [modelSel, loadModelsBtn]),
       runBtn,
+      stopBtn,
       noteLine,
     ]),
     progressBox,
@@ -335,6 +349,11 @@ function createSession(ctx: StudioContext): Session {
   function syncRun(): void {
     runBtn.disabled = running || !activeKey(settings);
     runBtn.textContent = running ? '만드는 중…' : doc ? '다시 만들기' : '완성본 만들기';
+    stopBtn.style.display = running ? '' : 'none';
+    if (!running) {
+      stopBtn.disabled = false;
+      stopBtn.textContent = '중지';
+    }
     printBtn.disabled = !doc || showingSample;
     saveBtn.disabled = !doc || showingSample;
     closeBtn.textContent = running ? '접어 두기' : '닫기';
@@ -454,6 +473,14 @@ function createSession(ctx: StudioContext): Session {
             abort.signal,
           )
         : [];
+
+      // 교사가 중지를 눌렀다 — 반쯤 된 결과는 버리고, 있던 완성본은 그대로 지킨다.
+      if (abort.signal.aborted) {
+        failures = [];
+        progressBox.style.display = 'none';
+        note(doc ? '중지했습니다. 이전 완성본은 그대로 남아 있습니다.' : '중지했습니다.');
+        return;
+      }
 
       doc = buildDoc([...textOnly, ...results]);
       overrides = {};
