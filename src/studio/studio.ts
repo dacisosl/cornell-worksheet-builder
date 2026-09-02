@@ -470,6 +470,18 @@ function createSession(ctx: StudioContext): Session {
         ),
       );
     }
+    // 모델·키 문제는 캡처마다 같은 사유다 — 한 줄로 묶어 알린다.
+    const fatal = failures.find((f) => f.fatal);
+    if (fatal) {
+      progressBox.appendChild(
+        el('div', { class: 'st-fail st-fail--model' }, [
+          el('div', {
+            text: `${fatal.error ?? '이 모델로는 전사할 수 없습니다.'} 캡처 ${failures.length}장이 그대로 이미지로 들어갔습니다. 모델을 바꾼 뒤 다시 만들어 주세요.`,
+          }),
+        ]),
+      );
+      return;
+    }
     for (const f of failures) {
       progressBox.appendChild(
         el('div', { class: 'st-fail' }, [
@@ -552,10 +564,13 @@ function createSession(ctx: StudioContext): Session {
       );
       persist();
       preview();
+      const modelFail = failures.find((f) => f.fatal);
       note(
-        bake.rasterized
-          ? ''
-          : '쪽 그림을 만들지 못해 이미지 조각만으로 전사했습니다. 배치는 그대로 지켰습니다.',
+        modelFail
+          ? `${modelFail.error ?? '이 모델로는 전사할 수 없습니다.'} 위 모델 목록에서 그림을 읽을 수 있는 다른 모델을 고른 뒤 다시 만들어 주세요.`
+          : bake.rasterized
+            ? ''
+            : '쪽 그림을 만들지 못해 이미지 조각만으로 전사했습니다. 배치는 그대로 지켰습니다.',
       );
     } catch (e) {
       note(e instanceof Error ? e.message : String(e));
