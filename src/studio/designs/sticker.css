@@ -40,4 +40,4 @@ body{background:#efe6c9}
 .ws-figure{border-radius:1.5mm}
 
 .ws-concept{border-radius:3mm;border-color:var(--ink);box-shadow:1.6mm 1.6mm 0 var(--c1);overflow:hidden}
-.ws-concept-term{background:var(--tint)}
+.ws-concept-term{display:inline-block;background:var(--tint);padding:.8mm 3mm 1mm;border-radius:1.4mm}

@@ -35,4 +35,4 @@ body{background:#efe9dc}
 
 /* 흐름 조판(예시) */
 .ws-concept{border-radius:var(--radius);border-color:var(--ink);overflow:hidden}
-.ws-concept-term{background:var(--sky);border-right-color:var(--ink-soft)}
+.ws-concept-term{display:inline-block;background:var(--sky);border-radius:99px;padding:.9mm 3.6mm 1.1mm}

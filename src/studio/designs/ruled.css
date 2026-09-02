@@ -37,4 +37,4 @@ body{background:#e9e2d2}
 .ws-choices{border-top-color:#D9B7B2}
 
 .ws-concept{border:0;border-top:.45mm solid var(--red);border-bottom:.45mm solid var(--red)}
-.ws-concept-term{background:transparent;color:var(--red);border-right:.3mm solid var(--red)}
+.ws-concept-term{color:var(--red);border-bottom:.25mm solid var(--red);padding-bottom:1.2mm}

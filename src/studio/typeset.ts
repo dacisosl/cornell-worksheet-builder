@@ -143,18 +143,32 @@ function textWithDoubts(s: string, doubts: string[]): string {
  * `\(x^2\)` 같은 날것이 보이는 일은 없다. 문법이 틀린 수식은 원문을 그대로 남겨
  * 교사가 미리보기에서 고칠 수 있게 한다.
  */
-function mathHtml(latex: string): string {
+function mathHtml(latex: string, display = false): string {
   try {
-    return katex.renderToString(latex, { throwOnError: false, output: 'html' });
+    return katex.renderToString(latex, { throwOnError: false, output: 'html', displayMode: display });
   } catch {
     return `<span class="ws-math-raw">${escapeHtml(latex)}</span>`;
   }
 }
 
+/**
+ * 런들을 HTML 로. 원문에서 별도 줄 가운데 있던 수식은 여기서도 줄을 끊고 가운데
+ * 크게 앉힌다 — 분수·등식이 문장에 끼어 눌리지 않게.
+ */
 function runsToHtml(runs: Run[], doubts: string[] = []): string {
   return runs
-    .map((r) => (r.t === 'text' ? textWithDoubts(r.s, doubts) : mathHtml(r.latex)))
+    .map((r) => {
+      if (r.t === 'text') return textWithDoubts(r.s, doubts);
+      if (r.display) return `<div class="ws-display">${mathHtml(r.latex, true)}</div>`;
+      return mathHtml(r.latex);
+    })
     .join('');
+}
+
+/** 원문에서 테두리·음영 박스로 묶여 있던 글 — 인용 박스로 */
+function noteHtml(runs: Run[] | undefined, path: string, opts: RenderOpts): string {
+  if (!runs?.length) return '';
+  return editable(runsToHtml(runs), `${path}.note`, 'ws-note', 'div', opts);
 }
 
 /** 미리보기에서 고친 내용이 있으면 그것으로, 없으면 새로 조판한 것으로 */
@@ -247,12 +261,13 @@ function problemHtml(
     : '';
 
   const figs = (item.figures ?? []).filter((f) => f.src);
+  const note = noteHtml(item.note, path, opts);
 
   if (place) {
     // 절대배치: 풀이 줄은 풀이칸 박스가 따로 맡는다. 그림은 글 안에 자리대로.
     const floats = figs.filter((f) => figureHtml(f, place, false).includes('--float'));
     const blocks = figs.filter((f) => !floats.includes(f));
-    const inner = `${floats.map((f) => figureHtml(f, place, false)).join('')}${stem}${choices}${subqs}${blocks
+    const inner = `${floats.map((f) => figureHtml(f, place, false)).join('')}${stem}${choices}${subqs}${note}${blocks
       .map((f) => figureHtml(f, place, false))
       .join('')}`;
     return `<section class="ws-item ws-problem${noMark ? ' ws-problem--nomark' : ''}">
@@ -264,10 +279,10 @@ function problemHtml(
   const answer = `<div class="ws-answer" style="--lines:${item.answerLines}"></div>`;
   // 도판이 있으면 글과 나란히 세운다. 없으면 한 단으로 쭉 흐른다.
   const inner = figs.length
-    ? `<div class="ws-row"><div class="ws-row-main">${stem}${choices}${subqs}${answer}</div>${figs
+    ? `<div class="ws-row"><div class="ws-row-main">${stem}${choices}${subqs}${note}${answer}</div>${figs
         .map((f) => figureHtml(f, null, false))
         .join('')}</div>`
-    : `${stem}${choices}${subqs}${answer}`;
+    : `${stem}${choices}${subqs}${note}${answer}`;
 
   return `<section class="ws-item ws-problem">
     ${markHtml(n, item.tagLabel)}
@@ -279,17 +294,18 @@ function problemHtml(
 function conceptHtml(item: ConceptItem, path: string, opts: RenderOpts, place: Place | null): string {
   const figs = (item.figures ?? []).filter((f) => f.src);
   const body = editable(runsToHtml(item.body), `${path}.body`, 'ws-concept-body', 'div', opts);
+  const note = noteHtml(item.note, path, opts);
 
   if (place) {
     // 절대배치: 용어는 칸 머리가 맡는다. 여기는 정의와 그림만.
     return `<section class="ws-item ws-concept ws-concept--abs">
-    <div class="ws-concept-main">${body}${figs.map((f) => figureHtml(f, place, true)).join('')}</div>
+    <div class="ws-concept-main">${body}${note}${figs.map((f) => figureHtml(f, place, true)).join('')}</div>
   </section>`;
   }
 
   return `<section class="ws-item ws-concept">
     <div class="ws-concept-term">${escapeHtml(item.title ?? '개념')}</div>
-    <div class="ws-concept-main">${body}${figs.map((f) => figureHtml(f, null, true)).join('')}</div>
+    <div class="ws-concept-main">${body}${note}${figs.map((f) => figureHtml(f, null, true)).join('')}</div>
   </section>`;
 }
 
