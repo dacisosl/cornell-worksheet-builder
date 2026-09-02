@@ -1,0 +1,43 @@
+/* ── 스티커 활동지 ───────────────────────────────────────────
+   연노랑 종이 위에 흰 칸. 칸마다 색이 다른 딱딱한 오프셋 그림자와 마스킹테이프.
+   색은 그림자·테이프·번호 동그라미에만 — 글씨는 언제나 진한 잉크. */
+:root{
+  --paper:#FFF6D8; --ink:#222222; --ink-mid:#6A6A6A; --ink-soft:#DCDCDC; --tint:#FFF0B8;
+  --c1:#F58A6B; --c2:#7FB6E6; --c3:#8FD4A8; --c4:#F5C443;
+}
+body{background:#efe6c9}
+.ws-page{background:var(--paper)}
+
+.ws-head{border:0;flex-direction:column;align-items:center;text-align:center;gap:2.6mm;padding-bottom:0}
+.ws-head-l{display:flex;flex-direction:column;align-items:center}
+.ws-tagbox{border:0;background:none;padding:0;font-size:10pt;font-weight:500;color:var(--ink-mid);letter-spacing:.02em}
+.ws-title{font-size:28pt;font-weight:900;letter-spacing:-.02em;margin-top:.5mm}
+.ws-meta{flex-direction:row;gap:7mm;border:.4mm solid var(--ink);border-radius:2.5mm;background:#fff;
+  padding:2.4mm 6mm;box-shadow:1.2mm 1.2mm 0 var(--c4);margin-top:1mm}
+.ws-meta-field span{width:22mm}
+
+.ws-cont{border-bottom-color:var(--ink)}
+.ws-foot-line{border-top-color:var(--ink)}
+
+.ws-cell{border:.4mm solid var(--ink)!important;border-radius:3mm;background:#fff;
+  box-shadow:1.6mm 1.6mm 0 var(--c2);overflow-clip-margin:3mm}
+.ws-cell--concept{box-shadow:1.6mm 1.6mm 0 var(--c1)}
+.ws-cell--mock{box-shadow:1.6mm 1.6mm 0 var(--c3)}
+.ws-cell--image{box-shadow:1.6mm 1.6mm 0 var(--c4)}
+.ws-cell--bare{border:0!important;box-shadow:none;background:transparent}
+.ws-cellhead{border-bottom:0;justify-content:center;font-size:10.5pt;font-weight:800;background:transparent}
+.ws-cellhead--concept{background:transparent}
+/* 마스킹테이프 */
+.ws-cellhead::before{content:"";position:absolute;right:5mm;top:-1.8mm;width:13mm;height:4.2mm;
+  background:repeating-linear-gradient(135deg,var(--c3) 0 1.4mm,rgba(255,255,255,.9) 1.4mm 2.8mm);
+  transform:rotate(-7deg);border-radius:.4mm;opacity:.9}
+.ws-cell--concept .ws-cellhead::before{background:repeating-linear-gradient(135deg,var(--c1) 0 1.4mm,rgba(255,255,255,.9) 1.4mm 2.8mm)}
+.ws-cell--mock .ws-cellhead::before{background:repeating-linear-gradient(135deg,var(--c4) 0 1.4mm,rgba(255,255,255,.9) 1.4mm 2.8mm)}
+.ws-box--right{border-left:.3mm dashed var(--ink-soft)}
+.ws-box--below{border-top:.3mm dashed var(--ink-soft)}
+.ws-no{border-radius:50%;background:var(--c4);color:var(--ink)}
+.ws-no.alt{background:#fff}
+.ws-figure{border-radius:1.5mm}
+
+.ws-concept{border-radius:3mm;border-color:var(--ink);box-shadow:1.6mm 1.6mm 0 var(--c1);overflow:hidden}
+.ws-concept-term{background:var(--tint)}
