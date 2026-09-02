@@ -1198,3 +1198,22 @@ button { font-family: inherit; cursor: pointer; }
 
   .empty { display: none !important; }
 }
+
+/* ── 화면용 인쇄 배치 (body.is-printing) ─────────────────────────
+   스튜디오가 초안을 "구울" 때 켠다. 위 @media print 의 편집 UI 숨김 규칙과
+   쌍이다 — 한쪽을 고치면 다른 쪽도 같이 고친다. 쪽 치수(mm) 규칙은 옮기지 않는다. */
+body.is-printing :is(.bctrl, .btitle-size-ctrl, .resize-h, .vdiv, .hdiv, .page-tools, .notebar,
+  .draw-tb-host, .size-badge, .ihandle, .img-tb, .draw-tb, .dt-drag, .crop-box, .bhead.compact,
+  .field-tools, .galign, .btag-x, .btag-restore, .empty) { display: none !important; }
+body.is-printing :is(.imgobj.grouped, .panel-active, .block.over)::after { display: none !important; }
+body.is-printing .block.headless { border-color: transparent !important; background: transparent !important; }
+body.is-printing .sheet-book.note-mode .page-inner { outline: none !important; }
+body.is-printing .page-draw { box-shadow: none !important; }
+body.is-printing .dt-body { background: transparent !important; box-shadow: none !important; }
+body.is-printing .field { overflow: hidden; }
+body.is-printing :is(.field, .sheet-title, .btag-label, .pc-name):empty::before { content: none !important; }
+body.is-printing :is(.btitle-input, .meta-field input)::placeholder { color: transparent !important; }
+body.is-printing .btitle-input { color: var(--ink) !important; }
+body.is-printing .imgobj img { box-shadow: none !important; }
+body.is-printing .block, body.is-printing .sheet-page { box-shadow: none !important; }
+body.is-printing .page-foot { display: flex !important; }

@@ -3,10 +3,14 @@
  *
  * 글은 다시 조판하지만 그림·그래프·표는 원본을 그대로 쓴다. 그래서 여기서 하는 일은
  * 잘라내기(bbox) → 배경 흰색화 → 흰 여백 잘라내기 → 선명하게, 이 네 가지뿐이다.
+ *
+ * 잘라낸 뒤 **실제로 덮는 영역(box)** 도 함께 돌려준다. 여유를 두고 잘라 여백을 다듬으면
+ * 영역이 조금 달라지는데, 조판은 그 실제 영역에 그림을 앉혀야 초안 크기와 맞는다.
  */
 
 import { loadImage, unsharp } from '../lib/imageProcessing';
-import type { FigureRef } from './schema';
+import { compose } from './snapshot';
+import type { FigureRef, Rect } from './schema';
 
 /** bbox 가 조금씩 어긋나도 그림이 잘리지 않게 두는 여유 */
 const PAD = 0.02;
@@ -19,20 +23,23 @@ function canvasOf(w: number, h: number): { c: HTMLCanvasElement; g: CanvasRender
   return g ? { c, g } : null;
 }
 
-/** bbox(0..1) 영역을 잘라낸다 — images.ts 의 applyCrop 과 같은 캔버스 방식 */
-function cropBBox(img: HTMLImageElement, bbox: [number, number, number, number]): HTMLCanvasElement | null {
+/** bbox(0..1) 영역을 여유를 두고 잘라낸다. 잘라낸 픽셀 영역도 함께. */
+function cropBBox(
+  img: HTMLImageElement,
+  bbox: Rect,
+): { c: HTMLCanvasElement; x: number; y: number; w: number; h: number } | null {
   const nw = img.naturalWidth;
   const nh = img.naturalHeight;
-  const x = Math.max(0, (bbox[0] - PAD) * nw);
-  const y = Math.max(0, (bbox[1] - PAD) * nh);
-  const w = Math.min(nw - x, (bbox[2] + PAD * 2) * nw);
-  const h = Math.min(nh - y, (bbox[3] + PAD * 2) * nh);
+  const x = Math.max(0, Math.round((bbox[0] - PAD) * nw));
+  const y = Math.max(0, Math.round((bbox[1] - PAD) * nh));
+  const w = Math.round(Math.min(nw - x, (bbox[2] + PAD * 2) * nw));
+  const h = Math.round(Math.min(nh - y, (bbox[3] + PAD * 2) * nh));
   if (w < 4 || h < 4) return null;
 
   const made = canvasOf(w, h);
   if (!made) return null;
-  made.g.drawImage(img, Math.round(x), Math.round(y), Math.round(w), Math.round(h), 0, 0, made.c.width, made.c.height);
-  return made.c;
+  made.g.drawImage(img, x, y, w, h, 0, 0, made.c.width, made.c.height);
+  return { c: made.c, x, y, w, h };
 }
 
 /**
@@ -73,9 +80,9 @@ function normalizeWhite(c: HTMLCanvasElement): void {
 }
 
 /** 사방의 완전히 흰 띠를 잘라낸다 — 캡처 여백 때문에 도판이 작아 보이는 걸 막는다 */
-function trimMargins(c: HTMLCanvasElement): HTMLCanvasElement {
+function trimMargins(c: HTMLCanvasElement): { c: HTMLCanvasElement; left: number; top: number } {
   const g = c.getContext('2d', { willReadFrequently: true });
-  if (!g) return c;
+  if (!g) return { c, left: 0, top: 0 };
   const { width: w, height: h } = c;
   const px = g.getImageData(0, 0, w, h).data;
   const WHITE = 244;
@@ -112,45 +119,65 @@ function trimMargins(c: HTMLCanvasElement): HTMLCanvasElement {
 
   const nw = right - left + 1;
   const nh = bottom - top + 1;
-  if (nw < 8 || nh < 8 || (nw === w && nh === h)) return c;
+  if (nw < 8 || nh < 8 || (nw === w && nh === h)) return { c, left: 0, top: 0 };
 
   const made = canvasOf(nw, nh);
-  if (!made) return c;
+  if (!made) return { c, left: 0, top: 0 };
   made.g.drawImage(c, left, top, nw, nh, 0, 0, nw, nh);
-  return made.c;
+  return { c: made.c, left, top };
 }
 
-/** 정리한 도판을 dataURL 로 — 실패하면 원본 캡처를 그대로 돌려준다 */
-export async function prepareFigure(
-  captureSrc: string,
-  bbox: [number, number, number, number],
-): Promise<string> {
+/**
+ * 정리한 도판을 dataURL 로, 실제로 덮는 영역(원본 대비 비율)과 함께.
+ * 실패하면 원본을 그대로, 영역은 bbox 그대로 돌려준다.
+ */
+export async function prepareFigure(src: string, bbox: Rect): Promise<{ src: string; box: Rect }> {
   try {
-    const img = await loadImage(captureSrc);
+    const img = await loadImage(src);
     const cropped = cropBBox(img, bbox);
-    if (!cropped) return captureSrc;
-    normalizeWhite(cropped);
-    const trimmed = trimMargins(cropped);
-    const url = trimmed.toDataURL('image/png');
+    if (!cropped) return { src, box: bbox };
+    normalizeWhite(cropped.c);
+    const trimmed = trimMargins(cropped.c);
+    const nw = Math.max(1, img.naturalWidth);
+    const nh = Math.max(1, img.naturalHeight);
+    const box: Rect = [
+      (cropped.x + trimmed.left) / nw,
+      (cropped.y + trimmed.top) / nh,
+      trimmed.c.width / nw,
+      trimmed.c.height / nh,
+    ];
+    const url = trimmed.c.toDataURL('image/png');
     const reloaded = await loadImage(url);
-    return unsharp(reloaded) ?? url;
+    return { src: unsharp(reloaded) ?? url, box };
   } catch {
-    return captureSrc;
+    return { src, box: bbox };
   }
 }
 
 /**
  * 문서 안의 모든 FigureRef 에 잘라낸 도판을 채워 넣는다.
+ * 원본 이미지 한 장 안에 들어가는 그림은 그 이미지에서(해상도가 좋다), 아니면 캡처에서
+ * 자른다. box 는 어느 쪽이든 **캡처(문제칸) 대비 비율**로 맞춰 둔다.
  * src 는 저장하지 않으므로(용량) 문서를 열 때마다 여기서 다시 만든다.
  */
 export async function fillFigures(
   refs: FigureRef[],
   captureSrc: (from: string) => string | undefined,
+  imageSrc: (imgId: number) => string | undefined,
 ): Promise<void> {
   for (const ref of refs) {
     if (ref.src) continue;
-    const src = captureSrc(ref.from);
-    if (!src) continue;
-    ref.src = await prepareFigure(src, ref.bbox);
+    const origin = ref.source ? imageSrc(ref.source.imgId) : undefined;
+    if (ref.source && origin) {
+      const r = await prepareFigure(origin, ref.source.bbox);
+      ref.src = r.src;
+      ref.box = compose(ref.source.at, r.box);
+      continue;
+    }
+    const cap = captureSrc(ref.from);
+    if (!cap) continue;
+    const r = await prepareFigure(cap, ref.bbox);
+    ref.src = r.src;
+    ref.box = r.box;
   }
 }
