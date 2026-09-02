@@ -17,6 +17,7 @@ import katex from 'katex';
 import katexCssRaw from 'katex/dist/katex.min.css?raw';
 
 import designCss from './design.css?raw';
+import { DESIGNS, type DesignName } from './designs';
 import type {
   ConceptItem,
   DocSection,
@@ -38,6 +39,8 @@ export interface RenderOpts {
   editable?: boolean;
   /** data-path → 고쳐 쓴 innerHTML */
   overrides?: Record<string, string>;
+  /** 덧입힐 디자인 — 없으면 모노 미니멀 */
+  design?: DesignName;
 }
 
 /** 서체는 한 가족만 — Noto Sans KR. 수식은 KaTeX가 세리프 수식체로 저절로 구분된다. */
@@ -539,6 +542,7 @@ ${footerHtml(head)}
 <style>
 ${KATEX_CSS}
 ${designCss}
+${DESIGNS[opts.design ?? 'mono'].css}
 ${absolute ? ABS_TAIL_CSS : ''}
 </style>
 </head>

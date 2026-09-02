@@ -43,7 +43,7 @@
 .st-main{flex:1;min-width:0;display:flex;flex-direction:column;background:#f0efec}
 .st-top{display:flex;align-items:center;gap:8px;padding:10px 14px;background:#fff;
   border-bottom:1px solid #e6e6e3;flex-wrap:wrap;row-gap:8px}
-/* 왼쪽: 디자인 이름 + 예시 버튼. 디자인은 모노 미니멀 하나라 고르는 탭이 없다 */
+/* 왼쪽: 디자인 탭 + 예시 버튼 */
 .st-lead{display:flex;align-items:center;gap:10px;flex:1 1 auto;min-width:0;flex-wrap:wrap}
 .st-design{font-size:13px;font-weight:800;color:#1b1b1b;white-space:nowrap}
 .st-design-sub{font-size:11.5px;color:#8a8a84;white-space:nowrap}
@@ -95,3 +95,10 @@
 /* 구운 쪽 썸네일 — 무엇을 읽었는지 한눈에 */
 .st-thumbs{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0 4px}
 .st-thumbs img{width:60px;height:auto;border:1px solid #d8d8d4;border-radius:3px;background:#fff}
+
+/* 디자인 탭 — 이름 위에 올리면 한 줄 설명이 뜬다 */
+.st-tabs{display:flex;gap:5px;flex-wrap:wrap}
+.st-tab{font:inherit;font-size:12px;font-weight:600;padding:5px 10px;border-radius:99px;
+  border:1px solid #dcdcd8;background:#fff;cursor:pointer;color:#4a4a46;white-space:nowrap}
+.st-tab:hover{border-color:#a8a8a4}
+.st-tab[aria-pressed=true]{background:#1b1b1b;border-color:#1b1b1b;color:#fff}

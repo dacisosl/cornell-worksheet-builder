@@ -1,0 +1,42 @@
+/* ── 스파이럴 노트 ─────────────────────────────────────────
+   왼쪽에 검정 스프링 제본, 코랄 + 검정 두 색. 라벨은 칸 테두리에 걸친 알약.
+   라벨 글씨만 흰색(굵게, 10pt 이상) — 본문은 진한 잉크 그대로. */
+:root{--paper:#FBF9F4;--ink:#1B1B1B;--ink-mid:#666666;--ink-soft:#D9D6CF;--tint:#F3EFE7;--coral:#D84A31}
+body{background:#e8e6e0}
+.ws-page{background:var(--paper);padding-left:24mm}
+/* 제본 띠와 스프링 고리 */
+.ws-page::before{content:"";position:absolute;left:0;top:0;bottom:0;width:11mm;background:var(--ink)}
+.ws-page::after{content:"";position:absolute;left:2.2mm;top:9mm;bottom:9mm;width:7.2mm;
+  background:repeating-linear-gradient(to bottom,#F1EEE7 0 3mm,transparent 3mm 9mm);border-radius:1.5mm}
+
+.ws-head{border:.5mm solid var(--ink);border-radius:3.5mm;padding:3.4mm 5mm;align-items:center;background:#fff}
+.ws-tagbox{border:0;background:var(--ink);color:#fff;border-radius:99px;padding:.9mm 3.6mm 1.1mm;font-size:8.5pt}
+.ws-title{font-size:25pt;font-weight:900;letter-spacing:-.02em;margin-top:1.8mm}
+.ws-meta{padding-bottom:0}
+.ws-meta-field span{width:24mm}
+
+.ws-cont{border-bottom-color:var(--ink)}
+.ws-cont b{color:var(--coral)}
+/* 체커 띠 위의 푸터 */
+.ws-foot{position:relative;padding-top:6mm;border-top:0}
+.ws-foot::before{content:"";position:absolute;left:0;right:0;top:0;height:3.6mm;
+  background:repeating-conic-gradient(var(--coral) 0 25%,transparent 0 50%) 0 0/3.6mm 3.6mm}
+.ws-foot-line{border-top-color:var(--ink)}
+
+.ws-cell{border:.5mm solid var(--ink)!important;border-radius:3.5mm;background:#fff;overflow-clip-margin:4mm}
+.ws-cell--bare{border:0!important;background:transparent}
+.ws-cellhead{border:0;background:var(--coral);color:#fff;border-radius:99px;
+  width:auto!important;height:auto!important;max-width:70%;left:5mm!important;
+  padding:1.3mm 5mm 1.5mm;transform:translateY(-50%);font-size:10pt;font-weight:800;line-height:1.2}
+.ws-cellhead--concept,.ws-cell--mock .ws-cellhead{background:var(--ink)}
+.ws-cellhead-title{color:#fff}
+.ws-cellhead-tag{color:#fff;border-color:rgba(255,255,255,.55)}
+.ws-cellhead .ws-no{background:#fff;color:var(--ink);width:5.4mm;height:5.4mm;font-size:9.5pt}
+.ws-box--right{border-left:.4mm solid var(--ink)}
+.ws-box--below{border-top:.4mm solid var(--ink)}
+.ws-no{background:var(--coral);border-radius:50%}
+.ws-no.alt{border-color:var(--coral);color:var(--coral)}
+.ws-figure{border-radius:2mm;border-color:var(--ink);border-width:.3mm}
+
+.ws-concept{border-radius:3.5mm;border-color:var(--ink);overflow:hidden}
+.ws-concept-term{background:var(--ink);color:#fff;border-right:0}

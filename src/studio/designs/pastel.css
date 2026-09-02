@@ -1,0 +1,38 @@
+/* ── 파스텔 노트 ────────────────────────────────────────────
+   크림 종이 · 검정 외곽선의 둥근 칸 · 분홍 알약 라벨 · 하늘색 제목 칩.
+   색은 테두리·라벨에만 쓰고 본문 글씨는 그대로 진한 잉크다. */
+:root{
+  --paper:#FBF8EE; --ink:#262626; --ink-mid:#6B6B6B; --ink-soft:#E6CFD4; --tint:#F6DDE2;
+  --sky:#CFE5F7; --label:#F6DDE2; --radius:4mm;
+}
+body{background:#efe9dc}
+.ws-page{background:var(--paper)}
+
+.ws-head{border:.45mm solid var(--ink);border-radius:6mm;padding:3mm 6mm 0;background:#fff;
+  flex-direction:column;align-items:stretch;gap:0}
+.ws-head-l{display:flex;align-items:center;gap:4mm;padding-bottom:2.6mm}
+.ws-tagbox{border:0;background:var(--sky);border-radius:99px;padding:1mm 4mm 1.2mm;font-size:9pt;flex:0 0 auto}
+.ws-title{font-size:23pt;margin-top:0;flex:1;min-width:0}
+/* 이름·날짜는 제목 아래 한 줄 — 위 칸과 헤어라인으로 나눈다 */
+.ws-meta{flex-direction:row;gap:7mm;padding:2.4mm 0 2.8mm;border-top:.3mm solid var(--ink-soft);justify-content:flex-start}
+.ws-meta-field span{width:26mm;border-bottom-color:var(--ink-mid)}
+
+.ws-cont{border-bottom-color:var(--ink-soft)}
+.ws-foot-line{border-top-color:var(--ink-soft)}
+
+/* 칸: 둥근 검정 외곽선, 라벨은 테두리 위에 반쯤 걸친 알약 */
+.ws-cell{border:.45mm solid var(--ink)!important;border-radius:var(--radius);background:#fff;overflow-clip-margin:4mm}
+.ws-cell--bare{border:0!important;background:transparent}
+.ws-cellhead{border:.4mm solid var(--ink);border-radius:99px;background:var(--label);
+  width:auto!important;height:auto!important;max-width:72%;left:4.5mm!important;
+  padding:1.2mm 5mm 1.4mm;transform:translateY(-55%);font-size:10pt;font-weight:700;line-height:1.2}
+.ws-cellhead--concept{background:var(--sky)}
+.ws-cellhead .ws-no{width:5.4mm;height:5.4mm;font-size:9.5pt;border-radius:1.6mm}
+.ws-box--right{border-left:.3mm solid var(--ink-soft)}
+.ws-box--below{border-top:.3mm solid var(--ink-soft)}
+.ws-no{border-radius:1.8mm}
+.ws-figure{border-radius:2mm}
+
+/* 흐름 조판(예시) */
+.ws-concept{border-radius:var(--radius);border-color:var(--ink);overflow:hidden}
+.ws-concept-term{background:var(--sky);border-right-color:var(--ink-soft)}

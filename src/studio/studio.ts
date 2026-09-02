@@ -34,6 +34,7 @@ import {
   type CaptureResult,
   type CaptureUnit,
 } from './extract';
+import { DESIGN_ORDER, DESIGNS, isDesignName, type DesignName } from './designs';
 import { fillFigures } from './figures';
 import type { FigureRef, PolishedDoc, WorksheetItem } from './schema';
 import { SAMPLE_DOC } from './sampleDoc';
@@ -57,6 +58,7 @@ interface Saved {
   draftHash: string;
   doc: PolishedDoc;
   overrides: Record<string, string>;
+  design?: DesignName;
   savedAt: string;
 }
 
@@ -126,6 +128,7 @@ export default function openStudio(ctx: StudioContext): void {
 
 function createSession(ctx: StudioContext): Session {
   const settings: AiSettings = loadSettings();
+  let design: DesignName = 'mono';
   let doc: PolishedDoc | null = null;
   let overrides: Record<string, string> = {};
   let captureSrc = new Map<string, string>();
@@ -156,7 +159,7 @@ function createSession(ctx: StudioContext): Session {
     html:
       '<b>완성본이 아직 없습니다</b>왼쪽에서 API 키와 모델을 고르고 <b style="display:inline;font-size:inherit">완성본 만들기</b>를 누르세요.<br>' +
       '초안을 먼저 PDF처럼 쪽 단위로 구운 뒤, 칸·문제·그림의 자리는 그대로 두고 글만 다시 조판합니다.<br>' +
-      '위 <b style="display:inline;font-size:inherit">예시 학습지</b> 버튼을 누르면 완성본 디자인을 미리 볼 수 있습니다.',
+      '위 디자인 이름이나 <b style="display:inline;font-size:inherit">예시 학습지</b> 버튼을 누르면 각 디자인의 예시를 미리 볼 수 있습니다.',
   });
   view.appendChild(empty);
 
@@ -171,11 +174,26 @@ function createSession(ctx: StudioContext): Session {
 
   const rail = el('aside', { class: 'st-rail' });
 
-  /* 디자인은 모노 미니멀 하나 — 고르는 대신 예시 한 장을 바로 펼쳐 보여 준다 */
+  /* 디자인 탭 — 배치는 어느 디자인이나 같고, 덧입히는 옷만 다르다 */
+  const tabs = el('div', { class: 'st-tabs', role: 'tablist' });
+  for (const name of DESIGN_ORDER) {
+    const d = DESIGNS[name];
+    tabs.appendChild(
+      el('button', {
+        class: 'st-tab',
+        role: 'tab',
+        'aria-pressed': String(name === design),
+        title: d.blurb,
+        data: { design: name },
+        text: d.label,
+        onclick: () => setDesign(name),
+      }),
+    );
+  }
   const sampleBtn = el('button', {
     class: 'st-btn',
     text: '예시 학습지',
-    title: '모노 미니멀 디자인의 예시 학습지를 미리 봅니다',
+    title: '고른 디자인의 예시 학습지를 미리 봅니다',
     onclick: () => {
       if (showingSample && doc) {
         preview();
@@ -186,11 +204,27 @@ function createSession(ctx: StudioContext): Session {
       syncRun();
     },
   }) as HTMLButtonElement;
-  const lead = el('div', { class: 'st-lead' }, [
-    el('span', { class: 'st-design', text: '모노 미니멀' }),
-    el('span', { class: 'st-design-sub', text: '흑백 · 구조로 만든 위계 · 복사기 안전' }),
-    sampleBtn,
-  ]);
+  const lead = el('div', { class: 'st-lead' }, [tabs, sampleBtn]);
+
+  function markDesign(): void {
+    for (const b of tabs.children) {
+      b.setAttribute('aria-pressed', String((b as HTMLElement).dataset.design === design));
+    }
+  }
+
+  /** 디자인을 바꾼다 — 완성본이 있으면 그대로 다시 입히고, 없으면 예시로 보여 준다 */
+  function setDesign(name: DesignName): void {
+    if (doc && !showingSample) harvestEdits();
+    design = name;
+    markDesign();
+    if (doc && !showingSample) {
+      persist();
+      preview();
+    } else {
+      previewSample();
+    }
+    syncRun();
+  }
   const zoomSel = el('select', {
     class: 'st-zoom',
     title: '미리보기 배율',
@@ -638,8 +672,8 @@ function createSession(ctx: StudioContext): Session {
     sampleBadge.style.display = sample ? '' : 'none';
     stage.classList.toggle('sample', sample);
     frame.srcdoc = sample
-      ? renderDocument(target, { editable: false })
-      : renderDocument(target, { editable: true, overrides });
+      ? renderDocument(target, { editable: false, design })
+      : renderDocument(target, { editable: true, overrides, design });
     applyZoom();
     if (!sample) frame.addEventListener('load', reportTightCells, { once: true });
   }
@@ -692,6 +726,7 @@ function createSession(ctx: StudioContext): Session {
       draftHash: draftHash(ctx.state),
       doc: stripSrc(doc),
       overrides,
+      design,
       savedAt: new Date().toISOString(),
     };
     try {
@@ -707,7 +742,7 @@ function createSession(ctx: StudioContext): Session {
   function finalHtml(): string {
     harvestEdits();
     persist();
-    return renderDocument(doc!, { overrides });
+    return renderDocument(doc!, { overrides, design });
   }
 
   function doPrint(): void {
@@ -761,6 +796,10 @@ function createSession(ctx: StudioContext): Session {
       }
       doc = saved.doc;
       overrides = saved.overrides ?? {};
+      if (isDesignName(saved.design)) {
+        design = saved.design;
+        markDesign();
+      }
       // 도판·통째 캡처를 되살리려면 쪽 그림이 필요하다 — 다시 굽는다 (토큰은 들지 않는다).
       note('지난 완성본을 여는 중 — 초안을 다시 굽습니다…');
       bake = await bakeDraft(ctx.printLayout, () => {});

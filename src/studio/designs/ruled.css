@@ -1,0 +1,40 @@
+/* ── 레드 룰드 ──────────────────────────────────────────────
+   크림 종이에 와인레드 한 가지로 그린 룰. 칸은 상·하 룰만 있고 면은 없다.
+   글씨는 진한 갈빛 잉크 — 레드는 선과 소제목에만. */
+:root{
+  --paper:#F7F3E6; --ink:#2B2320; --ink-mid:#7A6E66; --ink-soft:#E1D6C1; --tint:#F0E8D4; --red:#9E2A2B;
+  --rules:repeating-linear-gradient(to bottom,transparent 0,transparent calc(var(--line-h) - 1px),
+    #D9B7B2 calc(var(--line-h) - 1px),#D9B7B2 var(--line-h));
+}
+body{background:#e9e2d2}
+.ws-page{background:var(--paper) repeating-linear-gradient(to bottom,rgba(60,30,20,.035) 0 1px,transparent 1px 3px)}
+
+.ws-head{border-bottom:.9mm double var(--red);padding-bottom:2.6mm}
+.ws-tagbox{border:0;padding:0;color:var(--red);font-style:italic;font-weight:500;font-size:10.5pt;
+  font-family:Georgia,'Nanum Myeongjo','Noto Serif KR',serif;letter-spacing:.02em}
+.ws-title{font-size:24pt;font-weight:700;margin-top:1.2mm}
+.ws-meta-field b{color:var(--red);font-weight:600}
+.ws-meta-field span{border-bottom-color:var(--red)}
+
+.ws-cont{border-bottom-color:var(--red);color:var(--red)}
+.ws-cont b{color:var(--ink)}
+.ws-foot{border-top:.45mm solid var(--red);color:var(--red);font-weight:600}
+.ws-foot-line{border-top:0}
+
+.ws-cell{border:0!important;border-top:.45mm solid var(--red)!important;border-bottom:.45mm solid var(--red)!important;
+  background:transparent;border-radius:0}
+.ws-cell--bare{border:0!important}
+.ws-cellhead{border-bottom:.3mm solid var(--red);color:var(--red);background:transparent;
+  font-size:9.5pt;font-weight:600;letter-spacing:.02em}
+.ws-cellhead--concept{background:transparent}
+.ws-cellhead-title{color:var(--red)}
+.ws-cellhead-tag{color:var(--red);border-color:var(--red)}
+.ws-box--right{border-left:.3mm solid var(--red)}
+.ws-box--below{border-top:.3mm solid var(--red)}
+.ws-no{background:var(--red);border-radius:0}
+.ws-no.alt{border-color:var(--red);color:var(--red);background:transparent}
+.ws-figure{border-color:var(--red);background:transparent}
+.ws-choices{border-top-color:#D9B7B2}
+
+.ws-concept{border:0;border-top:.45mm solid var(--red);border-bottom:.45mm solid var(--red)}
+.ws-concept-term{background:transparent;color:var(--red);border-right:.3mm solid var(--red)}

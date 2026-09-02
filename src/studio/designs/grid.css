@@ -1,0 +1,38 @@
+/* ── 모눈 메모 ─────────────────────────────────────────────
+   5mm 모눈 위에 굵은 검정 선. 편지지 머리말처럼 제목·이름·날짜를 표로 짠다.
+   색은 없다 — 검정 한 가지와 모눈의 회색만. */
+:root{--paper:#FFFFFF;--ink:#111111;--ink-mid:#555555;--ink-soft:#C4C4C4;--tint:#F1F1F1;
+  /* 풀이 줄은 모눈보다 진해야 보인다 */
+  --rules:repeating-linear-gradient(to bottom,transparent 0,transparent calc(var(--line-h) - 1px),
+    #B3B3B3 calc(var(--line-h) - 1px),#B3B3B3 var(--line-h));}
+body{background:#e4e4e4}
+.ws-page{background-color:var(--paper);
+  background-image:linear-gradient(#ECECEC 1px,transparent 1px),linear-gradient(90deg,#ECECEC 1px,transparent 1px);
+  background-size:5mm 5mm;background-position:15mm 16mm}
+
+.ws-head{border:.6mm solid var(--ink);padding:0;display:grid;grid-template-columns:1fr auto;
+  align-items:stretch;background:#fff;gap:0}
+.ws-head-l{padding:2.6mm 4mm 3mm;border-right:.6mm solid var(--ink)}
+.ws-tagbox{border:0;padding:0;font-size:7.5pt;font-weight:800;letter-spacing:.12em;color:var(--ink-mid)}
+.ws-title{font-size:21pt;font-weight:800;margin-top:1mm;letter-spacing:-.01em}
+.ws-meta{padding:2.6mm 4mm;gap:1.6mm;justify-content:center}
+.ws-meta-field b{color:var(--ink);font-weight:800;letter-spacing:.12em;font-size:7.5pt}
+.ws-meta-field span{width:26mm;border-bottom-color:var(--ink)}
+
+.ws-cont{border-bottom:.5mm solid var(--ink);color:var(--ink)}
+.ws-foot{border-top:.6mm solid var(--ink);color:var(--ink);font-weight:700}
+.ws-foot-line{border-top:0}
+
+.ws-cell{border:.5mm solid var(--ink)!important;background:#fff}
+.ws-cell--concept{border-width:.6mm!important}
+.ws-cell--bare{border:0!important;background:transparent}
+.ws-cellhead{border-bottom:.5mm solid var(--ink);background:#fff;font-size:9pt;letter-spacing:.06em;font-weight:800}
+.ws-cellhead--concept{background:var(--tint)}
+.ws-cellhead-tag{border-color:var(--ink);color:var(--ink)}
+.ws-box--right{border-left:.5mm solid var(--ink)}
+.ws-box--below{border-top:.5mm solid var(--ink)}
+.ws-no{border-radius:0}
+.ws-figure{border-color:var(--ink);border-width:.3mm}
+
+.ws-concept{border-width:.6mm}
+.ws-concept-term{border-right:.5mm solid var(--ink)}
