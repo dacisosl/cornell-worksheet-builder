@@ -1,34 +1,31 @@
 /**
- * 초안(빌더 상태)에서 캡처를 모으고, vision 모델로 **충실히 전사**해 내용 모델을 만든다.
+ * 구운 초안(snapshot)에서 캡처를 모으고, vision 모델로 **충실히 전사**해 내용 모델을 만든다.
  *
  * 원칙: 만들어 내지 않는다. 캡처에 있는 글만 옮겨 적고, 그림은 전사하지 않고
  * 위치(bbox)만 받아 나중에 잘라 붙인다. 실패한 캡처는 통째 이미지로 싣는다 —
  * 구멍이 남는 일은 없다.
  *
- * 전사 단위는 **칸(블록)**이다. 교사가 한 칸에 붙인 조각들은 초안 배치 그대로
- * 한 장으로 합쳐 보낸다 — 그래야 조각난 지문이 토막나지 않고 한 문제로 읽힌다.
+ * 캡처 단위는 **칸의 문제칸(패널) 그 자체**다. 구운 쪽에서 패널을 그대로 잘라 보내므로,
+ * 모델이 돌려주는 bbox(0~1)가 곧 패널 안 자리가 된다 — 완성본은 그 자리에 그대로 앉힌다.
  */
 
 import { complete, parseJsonLoose, type AiSettings } from '../lib/aiClient';
-import { loadImage } from '../lib/imageProcessing';
 import type { AppState, Block, ImageObj } from '../types';
-import { clampLines, validateItems, type WorksheetItem } from './schema';
+import { validateItems, type Rect, type WorksheetItem } from './schema';
+import { compositePanel, cropPanel, within, type Bake, type ImgBox, type PanelKey } from './snapshot';
 
-/** 한 번의 vision 요청 단위 — 초안 한 칸(블록)의 스냅숏 한 장 */
+/** 한 번의 vision 요청 단위 — 한 칸의 문제칸을 그대로 잘라낸 그림 한 장 */
 export interface CaptureUnit {
-  /** `blockId:cell` — 칸 하나가 캡처 하나다 */
+  /** `blockId:panel` — 패널 하나가 캡처 하나다 */
   id: string;
   blockId: number;
-  /** 모델에게 보여줄 이미지 dataURL */
+  panel: PanelKey;
+  /** 모델에게 보여줄 이미지 dataURL (글만 있는 칸은 빈 문자열) */
   src: string;
-  /** 교사가 직접 친 텍스트 — 문맥으로만 준다 */
+  /** 교사가 직접 친 텍스트 — 참고 원문으로 준다 */
   contextText: string;
-  /** 초안에서 잰 풀이칸 줄 수 */
-  answerLines: number;
   tagLabel: string;
   blockType: Block['type'];
-  /** 캡처 폭 ÷ 칸 폭 (0..1) — 그림을 초안에서 보이던 크기 그대로 되살릴 때 쓴다 */
-  wFrac: number;
 }
 
 export interface CaptureResult {
@@ -39,22 +36,19 @@ export interface CaptureResult {
   error?: string;
 }
 
-/** 한 줄 높이(px) — 초안 풀이칸 높이를 줄 수로 환산할 때 쓴다 */
-const DRAFT_LINE_PX = 34;
-
 function plainText(html: string): string {
   const d = document.createElement('div');
   d.innerHTML = html;
   return (d.textContent ?? '').replace(/\s+/g, ' ').trim();
 }
 
-function blockImages(b: Block): ImageObj[] {
+export function blockImages(b: Block): ImageObj[] {
   return 'imgs' in b ? b.imgs : [];
 }
 
-function blockText(b: Block): string {
+/** 칸에 타이핑된 글(제목 제외) */
+function typedText(b: Block): string {
   const parts: string[] = [];
-  if (b.title) parts.push(b.title);
   if ('probHtml' in b) parts.push(plainText(b.probHtml));
   if ('exHtml' in b) parts.push(plainText(b.exHtml));
   if ('imgHtml' in b) parts.push(plainText(b.imgHtml));
@@ -62,16 +56,7 @@ function blockText(b: Block): string {
   return parts.filter(Boolean).join('\n');
 }
 
-/** 초안 풀이칸 높이에서 줄 수를 짐작한다 */
-function answerLinesOf(b: Block): number {
-  if ('ratio' in b && typeof b.ratio === 'number') {
-    const solPx = b.h * (1 - b.ratio);
-    return clampLines(Math.round(solPx / DRAFT_LINE_PX), 4);
-  }
-  return 4;
-}
-
-function tagOf(b: Block, idx: number): string {
+export function tagOf(b: Block, idx: number): string {
   if (b.tagLabel) return b.tagLabel;
   const base =
     b.type === 'concept'
@@ -84,193 +69,99 @@ function tagOf(b: Block, idx: number): string {
   return `${base} ${idx + 1}`;
 }
 
-/** 화질 보정을 켠 이미지는 보정본으로 — 초안에서 교사가 보는 그대로다. */
-function srcOf(im: ImageObj): string {
-  return im.sharpened && im.sharpSrc ? im.sharpSrc : im.src;
-}
-
-/** 합성 캔버스의 최대 변 길이(px) — 화질과 요청 크기의 균형점 */
-const CELL_MAX_SIDE = 2600;
-
-/**
- * 한 칸에 붙은 조각들을 흰 캔버스 위에 **초안 배치 그대로** 합성한다.
- * 교사가 한 칸에 붙였다는 건 "이게 한 덩어리"라는 뜻이다 — 조각을 따로따로
- * 보여 주면 문제가 토막나므로, 그 칸을 통째로 찍은 것처럼 한 장으로 만든다.
- */
-async function compositeCell(
-  imgs: ImageObj[],
-  blockId: number,
-): Promise<{ src: string; wFrac: number }> {
-  const loaded = await Promise.all(imgs.map(async (im) => ({ im, el: await loadImage(srcOf(im)) })));
-
-  // 배치는 칸 폭 비율(x, w)과 칸 높이 비율(y)이다. 실제 칸의 치수로 편다.
-  const layer = document.querySelector<HTMLElement>(`.block[data-id="${blockId}"] .img-layer`);
-  const pw = layer?.clientWidth || 1000;
-  const ph = layer?.clientHeight || pw;
-
-  const boxes = loaded.map(({ im, el }) => {
-    const w = Math.max(1, im.w * pw);
-    const h = w * (im.ar || el.naturalHeight / Math.max(1, el.naturalWidth));
-    return { el, x: im.x * pw, y: im.y * ph, w, h };
-  });
-  const minX = Math.min(...boxes.map((b) => b.x));
-  const minY = Math.min(...boxes.map((b) => b.y));
-  const maxX = Math.max(...boxes.map((b) => b.x + b.w));
-  const maxY = Math.max(...boxes.map((b) => b.y + b.h));
-
-  const pad = 12;
-  const cw = Math.max(1, maxX - minX + pad * 2);
-  const ch = Math.max(1, maxY - minY + pad * 2);
-
-  // 화면 치수 그대로 그리면 원본보다 작아져 글씨가 뭉갠다 — 가장 촘촘한
-  // 조각이 원본 해상도를 지키는 배율로 키우되, 캔버스가 너무 커지지 않게 막는다.
-  let scale = 1;
-  for (const b of boxes) scale = Math.max(scale, b.el.naturalWidth / b.w);
-  scale = Math.min(scale, 3, CELL_MAX_SIDE / Math.max(cw, ch));
-  scale = Math.max(scale, 0.2);
-
-  // 합성 캡처가 칸 폭에서 차지하는 몫 — 완성본이 그림 크기를 되살릴 때 기준이 된다.
-  const wFrac = Math.min(1, Math.max(0.05, cw / pw));
-
-  const c = document.createElement('canvas');
-  c.width = Math.max(1, Math.round(cw * scale));
-  c.height = Math.max(1, Math.round(ch * scale));
-  const g = c.getContext('2d');
-  if (!g) return { src: srcOf(imgs[0]), wFrac: Math.min(1, imgs[0].w) };
-  g.fillStyle = '#ffffff';
-  g.fillRect(0, 0, c.width, c.height);
-  g.imageSmoothingQuality = 'high';
-  for (const b of boxes) {
-    g.drawImage(b.el, (b.x - minX + pad) * scale, (b.y - minY + pad) * scale, b.w * scale, b.h * scale);
-  }
-  return { src: c.toDataURL('image/png'), wFrac };
+/** 이 블록에서 캡처(그림)가 놓이는 패널 */
+export function imagePanelOf(b: Block): PanelKey | null {
+  if (b.type === 'problem' || b.type === 'mock') return 'prob';
+  if (b.type === 'image') return 'main';
+  if (b.type === 'concept') return b.imgMode === 'none' ? null : 'cimg';
+  return null;
 }
 
 /**
- * 초안을 훑어 캡처 단위를 만든다 — 칸 하나가 캡처 하나다. 이미지가 없는 칸은
- * AI를 부르지 않는다. 교사가 직접 친 글은 이미 정확하므로 그대로 옮긴다.
+ * 구운 초안을 훑어 캡처 단위를 만든다 — 이미지가 있는 칸만 AI를 부른다.
+ * 글만 있는 칸은 이미 정확하므로 그대로 옮기고, 빈 칸도 자리를 지키게 남긴다.
  */
 export async function collectCaptures(
   state: AppState,
-): Promise<{ units: CaptureUnit[]; textOnly: CaptureResult[] }> {
+  bake: Bake,
+): Promise<{ units: CaptureUnit[]; textOnly: CaptureResult[]; empty: CaptureResult[] }> {
   const units: CaptureUnit[] = [];
   const textOnly: CaptureResult[] = [];
+  const empty: CaptureResult[] = [];
 
   for (const [idx, b] of state.blocks.entries()) {
+    if (!bake.blocks.has(b.id)) continue; // 화면에 없는 블록은 완성본에도 없다
     const imgs = blockImages(b);
-    const text = blockText(b);
-    const lines = answerLinesOf(b);
+    const text = typedText(b);
     const tag = tagOf(b, idx);
+    const panel = imagePanelOf(b);
 
-    if (!imgs.length) {
-      if (!text) continue;
-      const unit: CaptureUnit = {
-        id: `${b.id}:text`,
-        blockId: b.id,
-        src: '',
-        contextText: text,
-        answerLines: lines,
-        tagLabel: tag,
-        blockType: b.type,
-        wFrac: 1,
-      };
-      textOnly.push({ unit, items: itemsFromText(b, text, lines), failed: false });
-      continue;
+    if (imgs.length && panel) {
+      const src = cropPanel(bake, b.id, panel) ?? (await compositePanel(bake, b.id, panel, imgs));
+      if (src) {
+        units.push({ id: `${b.id}:${panel}`, blockId: b.id, panel, src, contextText: text, tagLabel: tag, blockType: b.type });
+        continue;
+      }
     }
 
-    // 한 칸의 조각들은 전부 한 장으로 합친다 — 칸이 곧 문제 단위다.
-    // 조각을 따로 보내면 이어지는 지문이 토막나 딴 문제로 읽히기 때문에,
-    // 초안 배치 그대로 합성한 "칸 스냅숏" 하나만 모델에게 보여 준다.
-    const cap =
-      imgs.length > 1
-        ? await compositeCell(imgs, b.id)
-        : { src: srcOf(imgs[0]), wFrac: Math.min(1, Math.max(0.05, imgs[0].w)) };
-    units.push({
-      id: `${b.id}:cell`,
+    const unit: CaptureUnit = {
+      id: `${b.id}:text`,
       blockId: b.id,
-      src: cap.src,
+      panel: panel ?? 'ex',
+      src: '',
       contextText: text,
-      answerLines: lines,
       tagLabel: tag,
       blockType: b.type,
-      wFrac: cap.wFrac,
-    });
+    };
+    if (text) textOnly.push({ unit, items: itemsFromText(b, text), failed: false });
+    else empty.push({ unit, items: [], failed: false });
   }
 
-  return { units, textOnly };
+  return { units, textOnly, empty };
 }
 
 /** 교사가 친 글만 있는 칸 — AI 없이 바로 아이템으로 만든다 */
-function itemsFromText(b: Block, text: string, lines: number): WorksheetItem[] {
+function itemsFromText(b: Block, text: string): WorksheetItem[] {
   if (b.type === 'concept') {
-    // 제목은 용어 칸으로 가므로 본문에서 뺀다 — 같은 글이 두 번 실리지 않게.
-    const title = b.title?.trim();
-    const body = title && text.startsWith(title) ? text.slice(title.length).trim() : text;
-    return [
-      {
-        kind: 'concept',
-        title: title || undefined,
-        body: body ? [{ t: 'text', s: body }] : [],
-      },
-    ];
+    return [{ kind: 'concept', body: [{ t: 'text', s: text }] }];
   }
-  return [
-    {
-      kind: 'problem',
-      stem: [{ t: 'text', s: text }],
-      answerLines: lines,
-    },
-  ];
+  return [{ kind: 'problem', stem: [{ t: 'text', s: text }], answerLines: 4 }];
 }
 
-export const EXTRACT_SYSTEM = `당신은 교과서 캡처 이미지를 학습지로 옮겨 적는 편집자다.
+export const EXTRACT_SYSTEM = `당신은 학습지 캡처 이미지를 새 학습지로 옮겨 적는 편집자다.
 
-이미지는 학습지 한 칸을 통째로 찍은 것이다. 교사가 여러 캡처 조각을 이어 붙여
-만든 칸일 수 있다 — 조각 경계는 무시하고, 배치 순서(위→아래, 왼쪽→오른쪽)대로
-읽어 **이어지는 글은 한 문제로 합쳐** 전사한다. 조각 하나를 문제 하나로 착각하지 마라.
+이미지는 학습지 한 칸의 **문제칸**만 그대로 찍은 것이다(풀이칸은 없다). 교사가 교과서
+캡처 조각 여러 장을 이어 붙이고 글을 타이핑해 넣은 칸일 수 있다 — 조각 경계는 무시하고
+배치 순서(위→아래, 왼쪽→오른쪽)대로 읽어 **이어지는 글은 한 문제로 합쳐** 전사한다.
+타이핑된 글도 전사 대상이다. 참고로 준 원문과 같은 글이면 원문을 그대로 쓴다.
 
 절대 규칙
 - 이미지에 보이는 글을 **그대로 전사**한다. 요약·의역·문제 창작·정답 추가는 절대 금지다.
 - 확신이 서지 않는 어절도 보이는 대로 적고, 그 어절을 uncertain 배열에 넣는다.
 - 수식은 {"t":"math","latex":"..."} 런으로, 나머지 글은 {"t":"text","s":"..."} 런으로 쓴다.
 - **그림·그래프·표는 글로 옮기지 않는다.** 대신 그 영역을 figures 의 bbox 로만 알려 준다.
-  bbox 는 [x, y, w, h] 이고 이미지 크기 대비 0~1 비율이다.
+- 손으로 쓴 필기·밑줄·동그라미, 배경의 줄·격자 선은 옮기지 않는다.
+- 모든 item 에 그 문제(또는 개념)가 차지하는 영역을 bbox 로 적는다 — 번호·발문·보기·그림을
+  모두 포함하는 사각형이다. bbox 는 [x, y, w, h] 이고 이미지 크기 대비 0~1 비율이다.
 - ①②③④⑤ 같은 선택지는 choices 로, (1) (2) 같은 소문항은 subqs 로 분리한다.
 - 캡처에 문제가 여러 개면 items 를 여러 개로 나눈다.
-- 문제 본문 없이 그림뿐이면 [{"kind":"image"}] 하나만 돌려준다.
+- 문제 본문 없이 그림뿐이면 [{"kind":"image","bbox":[...]}] 하나만 돌려준다.
 - 머리말·쪽번호·출처 표시 같은 교과서 부속물은 옮기지 않는다.
 
 출력은 아래 모양의 JSON 객체 하나뿐이다. 설명이나 코드펜스를 붙이지 마라.
 {"items":[
-  {"kind":"problem","no":"12","stem":[런...],"choices":[[런...],...],
-   "subqs":[[런...],...],"figures":[{"bbox":[0,0,1,1],"caption":"..."}],
-   "answerLines":4,"uncertain":["..."],"tagLabel":"서술형"},
-  {"kind":"concept","title":"...","body":[런...]},
-  {"kind":"image"}
+  {"kind":"problem","no":"12","bbox":[0,0,1,0.5],"stem":[런...],"choices":[[런...],...],
+   "subqs":[[런...],...],"figures":[{"bbox":[0.6,0.1,0.4,0.3],"caption":"..."}],
+   "uncertain":["..."],"tagLabel":"서술형"},
+  {"kind":"concept","title":"...","bbox":[0,0.5,1,0.5],"body":[런...]},
+  {"kind":"image","bbox":[0,0,1,1]}
 ]}`;
 
 function userPrompt(unit: CaptureUnit): string {
   const ctx = unit.contextText
-    ? `\n\n참고 — 교사가 이 칸에 직접 적어 둔 글(전사 대상 아님, 문맥용):\n${unit.contextText}`
+    ? `\n\n참고 — 교사가 이 칸에 타이핑해 둔 원문(이미지에도 보인다. 같은 글이면 이대로 쓴다):\n${unit.contextText}`
     : '';
-  return `학습지 한 칸을 통째로 찍은 캡처입니다. 배치 순서대로 읽어 문제 단위로 전사하세요. 풀이칸은 약 ${unit.answerLines}줄로 잡습니다.${ctx}`;
-}
-
-/**
- * 그림이 초안에서 보이던 크기를 그대로 물려준다.
- * 도판 bbox 는 캡처 기준 비율이고 캡처는 칸의 wFrac 만큼이므로, 둘을 곱하면
- * "칸 폭의 몇 %" 가 된다 — 조판은 이 값으로 그림을 앉혀 칸 가득 늘리지 않는다.
- */
-function keepDraftSizes(items: WorksheetItem[], unit: CaptureUnit): void {
-  for (const it of items) {
-    if (it.kind === 'image') {
-      it.wFrac = unit.wFrac;
-      continue;
-    }
-    for (const f of it.figures ?? []) {
-      f.wFrac = Math.min(1, Math.max(0.08, f.bbox[2] * unit.wFrac));
-    }
-  }
+  return `학습지 한 칸의 문제칸을 그대로 찍은 캡처입니다. 배치 순서대로 읽어 문제 단위로 전사하고, 각 문제의 bbox 를 적어 주세요.${ctx}`;
 }
 
 /** 캡처 한 장을 전사한다. 실패하면 이미지 폴백을 돌려준다. */
@@ -281,7 +172,7 @@ export async function extractOne(
 ): Promise<CaptureResult> {
   const fallback = (error: string): CaptureResult => ({
     unit,
-    items: [{ kind: 'image', from: unit.id, wFrac: unit.wFrac }],
+    items: [{ kind: 'image', from: unit.id, bbox: [0, 0, 1, 1] }],
     failed: true,
     error,
   });
@@ -301,13 +192,43 @@ export async function extractOne(
       // 모델이 JSON 대신 잡담을 보냈다 — 교사에게는 원인만 짧게 알린다.
       return fallback('모델이 형식을 지키지 않았습니다. 이미지로 넣었으니 다시 시도해 보세요.');
     }
-    const items = validateItems(raw, unit.id, unit.answerLines);
+    const items = validateItems(raw, unit.id);
     if (!items) return fallback('전사 내용이 비었거나 형식이 어긋납니다. 이미지로 넣었습니다.');
-    keepDraftSizes(items, unit);
     return { unit, items, failed: false };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     return fallback(`전사에 실패했습니다 — ${msg}`);
+  }
+}
+
+/** 두 비율 사각형이 겹치는 넓이 */
+function overlapArea(a: Rect, b: Rect): number {
+  const w = Math.min(a[0] + a[2], b[0] + b[2]) - Math.max(a[0], b[0]);
+  const h = Math.min(a[1] + a[3], b[1] + b[3]) - Math.max(a[1], b[1]);
+  return w > 0 && h > 0 ? w * h : 0;
+}
+
+/**
+ * 도판이 원본 이미지 한 장 안에(90% 이상) 들어가면 그 이미지에서 자르도록 출처를 단다.
+ * 구운 쪽에서 자르는 것보다 해상도가 좋고, 배경 줄이나 타이핑 글이 섞이지 않는다.
+ */
+export function resolveFigureSources(items: WorksheetItem[], boxes: ImgBox[] | undefined): void {
+  if (!boxes?.length) return;
+  for (const it of items) {
+    if (it.kind === 'image') continue;
+    for (const f of it.figures ?? []) {
+      const area = f.bbox[2] * f.bbox[3];
+      if (area <= 0) continue;
+      const hit = boxes.find((b) => overlapArea(f.bbox, b.rect) / area >= 0.9);
+      if (!hit) continue;
+      const inner = within(f.bbox, hit.rect);
+      const x0 = Math.max(0, inner[0]);
+      const y0 = Math.max(0, inner[1]);
+      const x1 = Math.min(1, inner[0] + inner[2]);
+      const y1 = Math.min(1, inner[1] + inner[3]);
+      if (x1 - x0 <= 0.01 || y1 - y0 <= 0.01) continue;
+      f.source = { imgId: hit.imgId, bbox: [x0, y0, x1 - x0, y1 - y0], at: hit.rect };
+    }
   }
 }
 

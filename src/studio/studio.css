@@ -91,3 +91,7 @@
 @media print{
   .st-overlay,.st-pill{display:none!important}
 }
+
+/* 구운 쪽 썸네일 — 무엇을 읽었는지 한눈에 */
+.st-thumbs{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0 4px}
+.st-thumbs img{width:60px;height:auto;border:1px solid #d8d8d4;border-radius:3px;background:#fff}

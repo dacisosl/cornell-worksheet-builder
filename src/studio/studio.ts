@@ -24,22 +24,33 @@ import {
 } from '../lib/aiClient';
 import type { AppState } from '../types';
 import { el } from '../utils/dom';
-import { collectCaptures, extractAll, extractOne, type CaptureResult, type CaptureUnit } from './extract';
+import {
+  blockImages,
+  collectCaptures,
+  extractAll,
+  extractOne,
+  resolveFigureSources,
+  tagOf,
+  type CaptureResult,
+  type CaptureUnit,
+} from './extract';
 import { fillFigures } from './figures';
-import { readLayout } from './layout';
 import type { FigureRef, PolishedDoc, WorksheetItem } from './schema';
 import { SAMPLE_DOC } from './sampleDoc';
+import { bakeDraft, thumbnailUrl, type Bake, type PrintLayout } from './snapshot';
 import { renderDocument } from './typeset';
 
 import './studio.css';
 
-// v2: 캡처 단위가 이미지별에서 칸별로 바뀌어 v1 저장본의 도판 출처가 맞지 않는다.
-const STORE_KEY = 'cornell-studio-v2';
+// v3: 초안을 구워 자리를 재는 방식으로 바뀌어, 격자(행·높이 비율) 저장본과 맞지 않는다.
+const STORE_KEY = 'cornell-studio-v3';
 
 export interface StudioContext {
   state: AppState;
   safeTitle: () => string;
   dateStamp: () => string;
+  /** 초안을 구울 때 편집 UI를 감추고 A4 실치수로 돌려 놓는 스위치 (app.ts) */
+  printLayout: PrintLayout;
 }
 
 interface Saved {
@@ -49,14 +60,24 @@ interface Saved {
   savedAt: string;
 }
 
-/** 초안이 그대로인지 알아보는 지문 — 캡처와 글이 바뀌면 값이 달라진다. */
+/**
+ * 초안이 그대로인지 알아보는 지문 — 캡처·글은 물론 칸 크기·비율·이미지 자리처럼
+ * **배치**가 바뀌어도 값이 달라진다. 완성본은 배치를 그대로 옮기므로 배치도 내용이다.
+ */
 function draftHash(state: AppState): string {
-  const parts: string[] = [state.meta.title];
+  const parts: string[] = [state.meta.title, String(state.meta.showHead), String(state.meta.pageFit)];
   for (const b of state.blocks) {
-    parts.push(`${b.id}:${b.type}:${b.title}`);
-    if ('imgs' in b) for (const im of b.imgs) parts.push(`${im.id}:${im.src.length}:${im.src.slice(-24)}`);
+    const o = b as unknown as Record<string, unknown>;
+    parts.push(
+      `${b.id}:${b.type}:${b.title}:${b.h}:${o.ratio ?? ''}:${o.imgMode ?? ''}:${o.width ?? ''}:${b.titleHidden ? 1 : 0}:${b.tagHidden ? 1 : 0}:${b.tagLabel ?? ''}`,
+    );
+    for (const im of blockImages(b)) {
+      parts.push(
+        `${im.id}:${im.src.length}:${im.src.slice(-24)}:${im.x.toFixed(4)}:${im.y.toFixed(4)}:${im.w.toFixed(4)}:${im.sharpened ? 1 : 0}`,
+      );
+    }
     for (const k of ['probHtml', 'solHtml', 'exHtml', 'imgHtml', 'html'] as const) {
-      const v = (b as unknown as Record<string, unknown>)[k];
+      const v = o[k];
       if (typeof v === 'string') parts.push(v);
     }
   }
@@ -108,6 +129,10 @@ function createSession(ctx: StudioContext): Session {
   let doc: PolishedDoc | null = null;
   let overrides: Record<string, string> = {};
   let captureSrc = new Map<string, string>();
+  /** 마지막으로 구운 초안 — 자리와 쪽 그림 */
+  let bake: Bake | null = null;
+  /** 구운 쪽 썸네일 — 진행 상자에 보여 준다 */
+  let thumbs: string[] = [];
   let failures: CaptureResult[] = [];
   let running = false;
   let abort: AbortController | null = null;
@@ -130,7 +155,7 @@ function createSession(ctx: StudioContext): Session {
     class: 'st-empty',
     html:
       '<b>완성본이 아직 없습니다</b>왼쪽에서 API 키와 모델을 고르고 <b style="display:inline;font-size:inherit">완성본 만들기</b>를 누르세요.<br>' +
-      '초안에 붙인 교과서 캡처를 읽어 글은 다시 조판하고, 그림은 잘라서 배치합니다.<br>' +
+      '초안을 먼저 PDF처럼 쪽 단위로 구운 뒤, 칸·문제·그림의 자리는 그대로 두고 글만 다시 조판합니다.<br>' +
       '위 <b style="display:inline;font-size:inherit">예시 학습지</b> 버튼을 누르면 완성본 디자인을 미리 볼 수 있습니다.',
   });
   view.appendChild(empty);
@@ -342,7 +367,7 @@ function createSession(ctx: StudioContext): Session {
     el('h2', { text: '완성하기 스튜디오' }),
     el('p', {
       class: 'hint',
-      text: '초안의 교과서 캡처를 읽어, 글은 어절 단위로 다시 조판하고 그림은 잘라 배치합니다. 초안은 그대로 둡니다.',
+      text: '초안을 먼저 PDF처럼 한 장으로 구운 뒤, 칸·문제·그림의 자리는 그대로 두고 글만 어절 단위로 다시 조판합니다. 손필기는 옮기지 않습니다. 초안은 그대로 둡니다.',
     }),
     el('div', { class: 'st-group' }, [el('label', { text: 'AI 제공자' }), providerSel]),
     el('div', { class: 'st-group' }, [el('label', { text: 'API 키' }), keyInput, keyLink]),
@@ -402,6 +427,15 @@ function createSession(ctx: StudioContext): Session {
       el('div', { text: label }),
       el('div', { class: 'st-bar' }, el('i', { style: `width:${total ? (done / total) * 100 : 0}%` })),
     );
+    if (thumbs.length) {
+      progressBox.appendChild(
+        el(
+          'div',
+          { class: 'st-thumbs', title: '구운 초안 — 이 그림을 읽어 완성본을 만듭니다' },
+          thumbs.map((src, i) => el('img', { src, alt: `초안 ${i + 1}쪽` })),
+        ),
+      );
+    }
     for (const f of failures) {
       progressBox.appendChild(
         el('div', { class: 'st-fail' }, [
@@ -425,23 +459,40 @@ function createSession(ctx: StudioContext): Session {
     abort = new AbortController();
 
     try {
-      setProgress(0, 0, '캡처를 모으는 중…');
-      const { units, textOnly } = await collectCaptures(ctx.state);
+      // 1) 초안을 PDF처럼 굽는다 — 쪽 그림 + 칸·패널·이미지의 자리.
+      thumbs = [];
+      setProgress(0, 0, '초안을 PDF처럼 굽는 중…');
+      bake = await bakeDraft(
+        ctx.printLayout,
+        (done, total) => setProgress(done, total, `초안을 PDF처럼 굽는 중… ${done}/${total}쪽`),
+        abort.signal,
+      );
+      thumbs = bake.pages.map((p) => thumbnailUrl(p)).filter((s): s is string => !!s);
+      if (abort.signal.aborted) {
+        progressBox.style.display = 'none';
+        note(doc ? '중지했습니다. 이전 완성본은 그대로 남아 있습니다.' : '중지했습니다.');
+        return;
+      }
+
+      // 2) 구운 쪽에서 문제칸을 잘라 캡처로 삼는다.
+      setProgress(0, 0, '캡처를 잘라 내는 중…');
+      const { units, textOnly, empty } = await collectCaptures(ctx.state, bake);
       captureSrc = new Map(units.map((u) => [u.id, u.src]));
 
-      if (!units.length && !textOnly.length) {
+      if (!units.length && !textOnly.length && !empty.length) {
         note('초안이 비어 있습니다. 먼저 캡처나 글을 넣어 주세요.');
         progressBox.style.display = 'none';
         return;
       }
 
+      // 3) 전사한다.
       const results = units.length
         ? await extractAll(
             settings,
             units,
             (done, total, r) => {
               if (r.failed) failures = [...failures, r];
-              setProgress(done, total, `캡처 ${done}/${total} 전사 중…`);
+              setProgress(done, total, `칸 ${done}/${total} 전사 중…`);
             },
             abort.signal,
           )
@@ -455,14 +506,23 @@ function createSession(ctx: StudioContext): Session {
         return;
       }
 
-      doc = buildDoc([...textOnly, ...results]);
+      // 4) 초안 자리에 앉힌다.
+      doc = buildDoc([...empty, ...textOnly, ...results], bake);
       overrides = {};
       setProgress(1, 1, '도판을 다듬는 중…');
       await prepareFigures();
-      setProgress(1, 1, `완성본이 준비됐습니다 · 캡처 ${units.length}장${failures.length ? ` · 실패 ${failures.length}장` : ''}`);
+      setProgress(
+        1,
+        1,
+        `완성본이 준비됐습니다 · ${bake.pages.length}쪽 · 캡처 ${units.length}장${failures.length ? ` · 실패 ${failures.length}장` : ''}`,
+      );
       persist();
       preview();
-      note('');
+      note(
+        bake.rasterized
+          ? ''
+          : '쪽 그림을 만들지 못해 이미지 조각만으로 전사했습니다. 배치는 그대로 지켰습니다.',
+      );
     } catch (e) {
       note(e instanceof Error ? e.message : String(e));
     } finally {
@@ -482,6 +542,7 @@ function createSession(ctx: StudioContext): Session {
       btn.textContent = '다시';
       return;
     }
+    resolveFigureSources(r.items, bake?.blocks.get(unit.blockId)?.imgs[unit.panel]);
     // 성공했으면 그 캡처가 만든 아이템만 갈아 끼운다.
     for (const sec of doc.sections) {
       if (sec.srcBlockId !== unit.blockId) continue;
@@ -495,52 +556,63 @@ function createSession(ctx: StudioContext): Session {
     preview();
   }
 
-  function buildDoc(results: CaptureResult[]): PolishedDoc {
+  /**
+   * 전사 결과를 초안 자리에 앉힌 문서로 만든다. 칸 하나가 섹션 하나고, 자리는 구울 때
+   * 잰 그대로다 — 칸 크기·문제칸/풀이칸 분할·쪽은 교사가 정한 것이다.
+   */
+  function buildDoc(results: CaptureResult[], baked: Bake): PolishedDoc {
     const byBlock = new Map<number, WorksheetItem[]>();
-    const order: number[] = [];
-    const typeOf = new Map<number, string>();
-
     for (const r of results) {
-      const id = r.unit.blockId;
-      if (!byBlock.has(id)) {
-        byBlock.set(id, []);
-        order.push(id);
-        typeOf.set(id, r.unit.blockType);
-      }
-      byBlock.get(id)!.push(...r.items);
+      // 도판이 원본 이미지 한 장 안에 들어가면 거기서 자르게 출처를 단다.
+      resolveFigureSources(r.items, baked.blocks.get(r.unit.blockId)?.imgs[r.unit.panel]);
+      if (!byBlock.has(r.unit.blockId)) byBlock.set(r.unit.blockId, []);
+      byBlock.get(r.unit.blockId)!.push(...r.items);
     }
-
-    // 초안의 블록 순서를 그대로 지킨다 — 교사가 짜 둔 흐름이 곧 학습 순서다.
-    const blockOrder = new Map(ctx.state.blocks.map((b, i) => [b.id, i]));
-    order.sort((a, b) => (blockOrder.get(a) ?? 0) - (blockOrder.get(b) ?? 0));
-
-    // 지면 배치도 그대로 옮긴다 — 칸 크기와 자리는 교사가 정한 것이다.
-    const layout = readLayout();
-    const ratioOf = new Map(
-      ctx.state.blocks.map((b) => [b.id, 'ratio' in b ? (b as { ratio: number }).ratio : undefined]),
-    );
 
     return {
       meta: {
         title: ctx.state.meta.title || '학습지',
         subtitle: ctx.state.meta.contTitle || undefined,
         date: ctx.dateStamp(),
+        showHead: ctx.state.meta.showHead,
       },
-      sections: order.map((id) => {
-        const g = layout.get(id);
-        return {
-          srcBlockId: id,
-          srcType: typeOf.get(id) ?? 'problem',
-          geom: g ? { ...g, ratio: ratioOf.get(id) } : undefined,
-          items: byBlock.get(id) ?? [],
-        };
-      }),
+      // 초안의 블록 순서를 그대로 지킨다 — 교사가 짜 둔 흐름이 곧 학습 순서다.
+      sections: ctx.state.blocks
+        .filter((b) => baked.blocks.has(b.id))
+        .map((b, idx) => {
+          const snap = baked.blocks.get(b.id)!;
+          return {
+            srcBlockId: b.id,
+            srcType: b.type,
+            title: b.titleHidden ? undefined : b.title || undefined,
+            tagLabel: b.tagHidden ? undefined : tagOf(b, idx),
+            geom: {
+              page: snap.page,
+              rect: snap.rect,
+              head: snap.head,
+              bare: snap.bare,
+              clipped: snap.clipped,
+              panels: snap.panels,
+            },
+            items: byBlock.get(b.id) ?? [],
+          };
+        }),
     };
+  }
+
+  /** 원본 이미지 dataURL — 도판을 해상도 좋게 자를 때 쓴다 (화질 보정본이 있으면 그것) */
+  function imageSrc(imgId: number): string | undefined {
+    for (const b of ctx.state.blocks) {
+      for (const im of blockImages(b)) {
+        if (im.id === imgId) return im.sharpened && im.sharpSrc ? im.sharpSrc : im.src;
+      }
+    }
+    return undefined;
   }
 
   async function prepareFigures(): Promise<void> {
     if (!doc) return;
-    await fillFigures(allFigures(doc), (from) => captureSrc.get(from));
+    await fillFigures(allFigures(doc), (from) => captureSrc.get(from), imageSrc);
     // 통째로 실은 캡처는 원본 그대로 쓴다.
     for (const sec of doc.sections) {
       for (const item of sec.items) {
@@ -624,8 +696,9 @@ function createSession(ctx: StudioContext): Session {
     };
     try {
       localStorage.setItem(STORE_KEY, JSON.stringify(saved));
-    } catch {
-      /* 저장 공간이 모자라면 이번 세션에서만 쓴다 */
+    } catch (e) {
+      // 저장 공간이 모자라면 이번 세션에서만 쓴다 — 원인은 콘솔에만 남긴다.
+      console.warn('완성본을 브라우저에 저장하지 못했습니다.', e);
     }
   }
 
@@ -688,14 +761,20 @@ function createSession(ctx: StudioContext): Session {
       }
       doc = saved.doc;
       overrides = saved.overrides ?? {};
-      const { units } = await collectCaptures(ctx.state);
+      // 도판·통째 캡처를 되살리려면 쪽 그림이 필요하다 — 다시 굽는다 (토큰은 들지 않는다).
+      note('지난 완성본을 여는 중 — 초안을 다시 굽습니다…');
+      bake = await bakeDraft(ctx.printLayout, () => {});
+      thumbs = bake.pages.map((p) => thumbnailUrl(p)).filter((s): s is string => !!s);
+      const { units } = await collectCaptures(ctx.state, bake);
       captureSrc = new Map(units.map((u) => [u.id, u.src]));
       await prepareFigures();
       preview();
       syncRun();
       note('지난 완성본을 그대로 열었습니다.');
-    } catch {
-      /* 저장본이 깨졌으면 그냥 새로 만든다 */
+    } catch (e) {
+      // 저장본이 깨졌으면 그냥 새로 만든다 — 원인은 콘솔에만 남긴다.
+      console.warn('지난 완성본을 열지 못했습니다.', e);
+      note('');
     }
   })();
 

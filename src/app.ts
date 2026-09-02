@@ -189,12 +189,54 @@ export function createApp(root: HTMLElement) {
     }, 0);
   }
 
+  /* ── 인쇄 배치 모드 ─────────────────────────────────────
+     인쇄할 때와 스튜디오가 초안을 "구울" 때 똑같이 쓴다: 편집용 UI를 감추고,
+     배율·필기용 축소를 풀어 A4 실치수(794×1123px)로 쪽을 다시 나눈다.
+     화면에서는 body.is-printing 이 @media print 의 숨김 규칙과 쌍으로 동작한다. */
+  let pageFitBeforePrint: boolean | null = null;
+
+  function enterPrintLayout(): void {
+    renderer.closePops(null);
+    images.deselectImage();
+    (document.activeElement as HTMLElement | null)?.blur?.();
+    document.body.classList.add('is-printing');
+    // 스크롤 모드(한 장에 죽 이어 붙이기)는 쪽 단위로 굽지 못한다 — 잠시 쪽 맞춤으로.
+    if (!store.state.meta.pageFit) {
+      pageFitBeforePrint = false;
+      store.state.meta.pageFit = true;
+    }
+    pagination.paginate();
+    // paginate 가 배율을 다시 걸므로(onLayout → applyZoom) 그 뒤에 푼다.
+    const book = document.getElementById('sheetBook');
+    const wrap = document.getElementById('sheetWrap');
+    if (book) {
+      book.style.transform = 'none';
+      book.style.setProperty('--note-s', '1');
+    }
+    if (wrap) wrap.style.height = 'auto';
+  }
+
+  function exitPrintLayout(): void {
+    document.body.classList.remove('is-printing');
+    if (pageFitBeforePrint === false) {
+      store.state.meta.pageFit = false;
+      pageFitBeforePrint = null;
+    }
+    pagination.paginate();
+    applyZoom();
+  }
+
   /** 완성하기 스튜디오는 쓸 때만 받아 온다 — 빌더 첫 화면을 무겁게 하지 않는다. */
   async function openStudio(): Promise<void> {
     renderer.syncFromDOM();
     store.save();
     const { default: open } = await import('./studio/studio');
-    open({ state: store.state, safeTitle, dateStamp });
+    open({
+      state: store.state,
+      safeTitle,
+      dateStamp,
+      printLayout: { enter: enterPrintLayout, exit: exitPrintLayout },
+    });
   }
 
   function exportWorksheet(): void {
@@ -703,17 +745,13 @@ export function createApp(root: HTMLElement) {
     const baseDocTitle = document.title;
     window.addEventListener('beforeprint', () => {
       document.title = safeTitle() + (store.state.meta.note.on ? '_필기용' : '');
-      const book = document.getElementById('sheetBook');
-      const wrap = document.getElementById('sheetWrap');
-      if (book) book.style.transform = 'none';
-      if (wrap) wrap.style.height = 'auto';
-      document.body.classList.add('is-printing');
-      pagination.paginate();
+      enterPrintLayout();
+      // 필기용 인쇄는 축소된 본문 그대로 찍어야 한다 — 굽기와 달리 축소를 되살린다.
+      document.getElementById('sheetBook')?.style.setProperty('--note-s', String(store.noteScale()));
     });
     window.addEventListener('afterprint', () => {
       document.title = baseDocTitle;
-      document.body.classList.remove('is-printing');
-      applyZoom();
+      exitPrintLayout();
     });
   }
 
