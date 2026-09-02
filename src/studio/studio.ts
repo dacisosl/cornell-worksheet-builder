@@ -30,7 +30,6 @@ import { readLayout } from './layout';
 import type { FigureRef, PolishedDoc, WorksheetItem } from './schema';
 import { SAMPLE_DOC } from './sampleDoc';
 import { renderDocument } from './typeset';
-import { THEME_ORDER, THEMES, isThemeName, type ThemeName } from './themes';
 
 import './studio.css';
 
@@ -47,7 +46,6 @@ interface Saved {
   draftHash: string;
   doc: PolishedDoc;
   overrides: Record<string, string>;
-  theme: ThemeName;
   savedAt: string;
 }
 
@@ -107,7 +105,6 @@ export default function openStudio(ctx: StudioContext): void {
 
 function createSession(ctx: StudioContext): Session {
   const settings: AiSettings = loadSettings();
-  let theme: ThemeName = 'riso';
   let doc: PolishedDoc | null = null;
   let overrides: Record<string, string> = {};
   let captureSrc = new Map<string, string>();
@@ -134,7 +131,7 @@ function createSession(ctx: StudioContext): Session {
     html:
       '<b>완성본이 아직 없습니다</b>왼쪽에서 API 키와 모델을 고르고 <b style="display:inline;font-size:inherit">완성본 만들기</b>를 누르세요.<br>' +
       '초안에 붙인 교과서 캡처를 읽어 글은 다시 조판하고, 그림은 잘라서 배치합니다.<br>' +
-      '위 디자인 이름을 눌러 보면 각 형식의 예시 학습지를 미리 볼 수 있습니다.',
+      '위 <b style="display:inline;font-size:inherit">예시 학습지</b> 버튼을 누르면 완성본 디자인을 미리 볼 수 있습니다.',
   });
   view.appendChild(empty);
 
@@ -148,7 +145,27 @@ function createSession(ctx: StudioContext): Session {
   progressBox.style.display = 'none';
 
   const rail = el('aside', { class: 'st-rail' });
-  const themeBar = el('div', { class: 'st-themes' });
+
+  /* 디자인은 모노 미니멀 하나 — 고르는 대신 예시 한 장을 바로 펼쳐 보여 준다 */
+  const sampleBtn = el('button', {
+    class: 'st-btn',
+    text: '예시 학습지',
+    title: '모노 미니멀 디자인의 예시 학습지를 미리 봅니다',
+    onclick: () => {
+      if (showingSample && doc) {
+        preview();
+      } else {
+        if (doc && !showingSample) harvestEdits();
+        previewSample();
+      }
+      syncRun();
+    },
+  }) as HTMLButtonElement;
+  const lead = el('div', { class: 'st-lead' }, [
+    el('span', { class: 'st-design', text: '모노 미니멀' }),
+    el('span', { class: 'st-design-sub', text: '흑백 · 구조로 만든 위계 · 복사기 안전' }),
+    sampleBtn,
+  ]);
   const zoomSel = el('select', {
     class: 'st-zoom',
     title: '미리보기 배율',
@@ -175,7 +192,7 @@ function createSession(ctx: StudioContext): Session {
     rail,
     el('div', { class: 'st-main' }, [
       el('div', { class: 'st-top' }, [
-        themeBar,
+        lead,
         el('div', { class: 'st-actions' }, [zoomSel, printBtn, saveBtn, minBtn, closeBtn]),
       ]),
       view,
@@ -356,6 +373,7 @@ function createSession(ctx: StudioContext): Session {
     }
     printBtn.disabled = !doc || showingSample;
     saveBtn.disabled = !doc || showingSample;
+    sampleBtn.textContent = doc && showingSample ? '내 완성본 보기' : '예시 학습지';
     closeBtn.textContent = running ? '접어 두기' : '닫기';
     syncPill();
   }
@@ -368,52 +386,7 @@ function createSession(ctx: StudioContext): Session {
     });
   }
 
-  /* ── 테마 탭 ──────────────────────────────────────────── */
-
-  for (const name of THEME_ORDER) {
-    const t = THEMES[name];
-    themeBar.appendChild(
-      el(
-        'button',
-        {
-          class: 'st-theme',
-          'aria-pressed': String(name === theme),
-          data: { theme: name },
-          onclick: () => setTheme(name),
-        },
-        [
-          el('span', { class: 'st-theme-name', text: t.label }),
-          // 이름만 보고는 어떤 디자인인지 모른다 — 올려 두면 실물 한 장이 뜬다.
-          el('span', { class: 'st-peek' }, [
-            el('img', { src: `${import.meta.env.BASE_URL}samples/thumb-${name}.jpg`, alt: '', loading: 'lazy' }),
-            el('b', { text: t.label }),
-            el('i', { text: t.blurb }),
-          ]),
-        ],
-      ),
-    );
-  }
-
-  function markTheme(name: ThemeName): void {
-    for (const b of themeBar.children) {
-      b.setAttribute('aria-pressed', String((b as HTMLElement).dataset.theme === name));
-    }
-  }
-
-  function setTheme(name: ThemeName): void {
-    if (doc) harvestEdits();
-    theme = name;
-    markTheme(name);
-    if (doc) {
-      persist();
-      preview();
-    } else {
-      // 아직 만들기 전이라면 이 형식의 예시 학습지를 펼쳐 보여 준다.
-      previewSample();
-    }
-  }
-
-  /** 완성본이 없을 때 고른 형식의 예시 한 장을 미리보기에 띄운다 */
+  /** 예시 학습지 한 장을 미리보기에 띄운다 */
   function previewSample(): void {
     render(SAMPLE_DOC, true);
   }
@@ -593,8 +566,8 @@ function createSession(ctx: StudioContext): Session {
     sampleBadge.style.display = sample ? '' : 'none';
     stage.classList.toggle('sample', sample);
     frame.srcdoc = sample
-      ? renderDocument(target, theme, { editable: false })
-      : renderDocument(target, theme, { editable: true, overrides });
+      ? renderDocument(target, { editable: false })
+      : renderDocument(target, { editable: true, overrides });
     applyZoom();
     if (!sample) frame.addEventListener('load', reportTightCells, { once: true });
   }
@@ -647,7 +620,6 @@ function createSession(ctx: StudioContext): Session {
       draftHash: draftHash(ctx.state),
       doc: stripSrc(doc),
       overrides,
-      theme,
       savedAt: new Date().toISOString(),
     };
     try {
@@ -662,7 +634,7 @@ function createSession(ctx: StudioContext): Session {
   function finalHtml(): string {
     harvestEdits();
     persist();
-    return renderDocument(doc!, theme, { overrides });
+    return renderDocument(doc!, { overrides });
   }
 
   function doPrint(): void {
@@ -716,7 +688,6 @@ function createSession(ctx: StudioContext): Session {
       }
       doc = saved.doc;
       overrides = saved.overrides ?? {};
-      if (isThemeName(saved.theme)) setThemeSilently(saved.theme);
       const { units } = await collectCaptures(ctx.state);
       captureSrc = new Map(units.map((u) => [u.id, u.src]));
       await prepareFigures();
@@ -727,11 +698,6 @@ function createSession(ctx: StudioContext): Session {
       /* 저장본이 깨졌으면 그냥 새로 만든다 */
     }
   })();
-
-  function setThemeSilently(name: ThemeName): void {
-    theme = name;
-    markTheme(name);
-  }
 
   return { show, hide };
 }

@@ -1,0 +1,187 @@
+/* ── 모노 미니멀 ─────────────────────────────────────────────
+   캡처·편집으로 만든 학습지를 "처음부터 조판한 인쇄물"처럼 보이게 하는 단일 디자인.
+   색은 검정 + 회색뿐이다 — 흑백 복사기로 찍어도 정보가 하나도 사라지지 않는다.
+   위계는 장식이 아니라 구조(선 굵기 · 여백 · 굵기 대비)로 만든다. */
+
+:root{
+  --paper:#FFFFFF;      /* 배경 */
+  --ink:#1A1A1A;        /* 본문 · 수식 · 제목 · 그래프 주선 */
+  --ink-mid:#6E6E6E;    /* 러닝헤드 · 푸터 · 보조 텍스트 · 입력칸 밑줄 */
+  --ink-soft:#C9C9C9;   /* 풀이 줄 · 구분선 · 박스 안쪽 경계 */
+  --tint:#F3F3F3;       /* 유일한 면 색 — 개념 박스의 용어 칸에만 쓴다 */
+  --sans:'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;
+  --line-h:9.5mm;       /* 풀이 줄 간격 (고1~고2 필기 크기) */
+}
+
+*{margin:0;padding:0;box-sizing:border-box}
+html{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+
+@page{size:A4;margin:0}
+@media print{
+  body{background:#fff!important;padding:0!important}
+  .ws-page{box-shadow:none!important;margin:0!important}
+  .ws-uncertain{background:none!important;box-shadow:none!important}
+  [contenteditable]{outline:none!important}
+}
+
+body{background:#ececea;font-family:var(--sans);color:var(--ink);
+  display:flex;justify-content:center;padding:28px 12px}
+
+/* A4 · 여백 상 16mm / 좌우 15mm / 하 14mm */
+.ws-page{width:210mm;min-height:297mm;background:var(--paper);
+  padding:16mm 15mm 14mm;box-shadow:0 3px 26px rgba(20,20,20,.16);
+  display:flex;flex-direction:column;position:relative}
+
+/* 어절 단위로 끊어 읽히게 — 한국어 조판의 핵심 */
+.ws-doc{word-break:keep-all;overflow-wrap:break-word;flex:1;min-height:0;
+  display:flex;flex-direction:column}
+.ws-item{break-inside:avoid;page-break-inside:avoid}
+.ws-page{break-after:page}
+.ws-page:last-child{break-after:auto}
+
+/* ── 머리말: 태그 + 제목 ───── 이름 / 학년·반 / 날짜 ── */
+.ws-head{display:flex;justify-content:space-between;align-items:flex-end;gap:8mm;
+  padding-bottom:3.2mm;border-bottom:.4mm solid var(--ink)}
+.ws-tagbox{display:inline-block;font-size:10pt;font-weight:700;letter-spacing:.05em;
+  border:.3mm solid var(--ink);padding:.7mm 2.6mm .9mm}
+.ws-title{font-size:26pt;font-weight:700;line-height:1.16;letter-spacing:-.012em;
+  margin-top:2.4mm}
+.ws-meta{display:flex;flex-direction:column;gap:2.4mm;font-size:9pt;
+  flex:0 0 auto;padding-bottom:.8mm}
+.ws-meta-field{display:flex;align-items:baseline;gap:2.6mm;white-space:nowrap}
+.ws-meta-field b{font-weight:500;color:var(--ink-mid);letter-spacing:.08em}
+.ws-meta-field span{display:inline-block;width:30mm;border-bottom:1px solid var(--ink-mid)}
+
+/* 이어지는 쪽의 러닝헤드 — 작게, 회색으로 */
+.ws-cont{display:flex;justify-content:space-between;align-items:baseline;gap:3mm;
+  font-size:8.5pt;font-weight:500;color:var(--ink-mid);letter-spacing:.06em;
+  padding-bottom:2mm;margin-bottom:4mm;border-bottom:.25mm solid var(--ink-soft)}
+.ws-cont span{font-size:8.5pt}
+.ws-cont b{font-weight:700;font-size:9.5pt;color:var(--ink)}
+
+/* ── 푸터: 단원명 ───────────── n / N ── */
+.ws-foot{margin-top:auto;padding-top:3mm;display:flex;align-items:center;gap:4mm;
+  font-size:8.5pt;font-weight:500;color:var(--ink-mid);letter-spacing:.04em}
+.ws-foot-line{flex:1;border-top:1px solid var(--ink-soft)}
+.ws-foot .pg{font-variant-numeric:tabular-nums}
+
+/* ── 개념 정리 박스: 용어(24mm) | 정의 ── */
+.ws-concept{margin-top:5mm;border:.35mm solid var(--ink);
+  display:grid;grid-template-columns:24mm 1fr}
+.ws-concept-term{background:var(--tint);border-right:.25mm solid var(--ink-soft);
+  padding:2.8mm 2mm;font-size:10.4pt;font-weight:700;line-height:1.4;
+  display:flex;align-items:center;justify-content:center;text-align:center}
+.ws-concept-main{padding:2.8mm 3.4mm;min-width:0;display:flex;flex-direction:column}
+.ws-concept-body{font-size:10.6pt;font-weight:400;line-height:1.55}
+.ws-concept-body b{font-weight:700}
+
+/* ── 문항: 6.2mm 검정 정사각 번호, 본문은 마크 폭(8.7mm)만큼 들여쓰기 ── */
+.ws-item + .ws-item{margin-top:6mm}
+.ws-problem{display:grid;grid-template-columns:8.7mm 1fr;column-gap:0;margin-top:5mm}
+.ws-mark{padding-top:.4mm}
+.ws-no{width:6.2mm;height:6.2mm;background:var(--ink);color:#fff;
+  display:flex;align-items:center;justify-content:center;
+  font-size:10.5pt;font-weight:700;line-height:1;font-variant-numeric:tabular-nums}
+/* 유형이 다른 문제(예제·빈칸 등)는 같은 크기의 흰 바탕 + 검정 테두리 */
+.ws-no.alt{background:var(--paper);color:var(--ink);border:.3mm solid var(--ink)}
+.ws-marktag{display:block;font-size:6.5pt;font-weight:700;letter-spacing:.04em;
+  color:var(--ink);margin-top:1.2mm;width:8.7mm;text-align:left;line-height:1.3}
+
+.ws-stem{font-size:10.6pt;font-weight:400;line-height:1.55}
+.ws-stem u{text-decoration-thickness:.3mm;text-underline-offset:1.5px}
+
+/* 객관식 보기 — 한 줄 다섯, 하단 하이라인으로 발문과 구분 */
+.ws-choices{margin-top:2.6mm;padding-top:2.2mm;border-top:.25mm solid var(--ink-soft);
+  display:grid;grid-template-columns:repeat(5,auto);justify-content:space-between;
+  gap:1.6mm 3mm;font-size:10.6pt;line-height:1.5}
+.ws-choice{display:flex;gap:1.6mm;align-items:baseline;white-space:nowrap}
+.ws-choice b{font-weight:400}
+
+/* 소문항 (1)(2) — 번호 굵게 */
+.ws-subqs{margin-top:2.6mm;display:grid;gap:1.8mm;font-size:10.6pt}
+.ws-subq{display:flex;gap:2mm;align-items:baseline;line-height:1.55}
+.ws-subq b{font-weight:700}
+
+/* ── 도판 — 하이라인 패널, 캡션은 회색 ── */
+.ws-row{display:flex;gap:5mm;align-items:flex-start}
+.ws-row-main{flex:1;min-width:0}
+.ws-figure{border:.25mm solid var(--ink-soft);padding:2.4mm;background:var(--paper)}
+.ws-figure img{width:100%;height:auto;display:block}
+.ws-figure--side{flex:0 0 min(76mm,42%)}
+.ws-figure--wide{margin-top:3mm}
+.ws-figure figcaption{font-size:7.6pt;color:var(--ink-mid);text-align:center;
+  margin-top:1.6mm;letter-spacing:.08em}
+
+/* 통째로 실은 캡처 */
+.ws-image{margin-top:4mm}
+.ws-image figure{border:.25mm solid var(--ink-soft);padding:2.4mm}
+.ws-image img{width:100%;height:auto;display:block}
+.ws-image figcaption{font-size:7.6pt;color:var(--ink-mid);margin-top:1.4mm;text-align:center}
+
+/* ── 풀이 공간 — 9.5mm 줄, ink-soft. 필기와 경쟁하지 않게 연하게 ── */
+.ws-answer{--lines:4;margin-top:3mm;
+  height:calc(var(--lines) * var(--line-h));
+  background:repeating-linear-gradient(to bottom,
+    transparent 0, transparent calc(var(--line-h) - 1px),
+    var(--ink-soft) calc(var(--line-h) - 1px), var(--ink-soft) var(--line-h))}
+
+/* 마지막 문제의 풀이 공간이 남는 높이를 전부 흡수한다 — 하단 공백이 생기지 않게 */
+.ws-page:not(.ws-page--grid) .ws-doc > .ws-problem:last-of-type{flex:1;min-height:0}
+.ws-page:not(.ws-page--grid) .ws-doc > .ws-problem:last-of-type > div:last-child{
+  display:flex;flex-direction:column;min-height:0}
+.ws-page:not(.ws-page--grid) .ws-doc > .ws-problem:last-of-type .ws-answer{flex:1}
+
+/* ── 수식 — 본문의 1.08배, 인라인 수식은 줄바꿈 금지 ── */
+.katex{font-size:1.08em}
+.ws-stem .katex,.ws-concept-body .katex,.ws-choice .katex,.ws-subq .katex{white-space:nowrap}
+.katex-display{margin:2mm 0}
+/* 빈칸(\boxed) — 테두리 1px, 안쪽 흰색 */
+.katex .fbox,.katex .boxpad{border-color:var(--ink)}
+
+/* 모델이 확신하지 못한 어절 — 화면에서만, 인쇄에는 안 나온다 */
+.ws-uncertain{background:rgba(255,214,0,.42);border-radius:2px;padding:0 .3mm}
+
+/* 미리보기에서 직접 고칠 수 있는 자리 */
+[contenteditable]{outline:1px dashed transparent;outline-offset:2px;transition:outline-color .12s}
+[contenteditable]:hover{outline-color:rgba(120,120,120,.45)}
+[contenteditable]:focus{outline:1.5px solid rgba(40,110,255,.75)}
+
+/* ── 초안 배치를 그대로 옮긴 조판 ────────────────────────────────
+   교사가 잡아 둔 쪽·행·칸을 그대로 재현한다. 행 높이는 그 쪽 본문 높이에 대한
+   비율(--f)이고, 반칸 두 개는 한 행에 나란히 선다. 같은 행의 칸은 높이가 같아
+   왼쪽·오른쪽 문제의 아래 끝이 저절로 맞는다. */
+.ws-page--grid{page-break-after:always;break-after:page}
+.ws-page--grid:last-of-type{page-break-after:auto;break-after:auto}
+
+.ws-stack{--gaps:0;flex:1;min-height:0;display:flex;flex-direction:column;margin-top:4.5mm}
+.ws-trow{display:flex;gap:5mm;min-height:0;
+  height:calc(var(--f) * (100% - var(--gaps) * 4.5mm));flex:0 0 auto}
+.ws-trow + .ws-trow{margin-top:4.5mm}
+.ws-cell{flex:1 1 0;min-width:0;min-height:0;display:flex;flex-direction:column;
+  overflow:hidden;overflow:clip;overflow-clip-margin:5mm}
+.ws-cellin{flex:1;min-height:0;display:flex;flex-direction:column}
+
+/* 칸 안에서는 아이템이 위아래 여백을 스스로 만들지 않는다 — 칸이 곧 여백이다 */
+.ws-page--grid .ws-item{margin-top:0}
+.ws-page--grid .ws-item + .ws-item{margin-top:3mm}
+.ws-page--grid .ws-cellin > .ws-item{flex:1;min-height:0}
+/* 문항 본문 묶음은 세로로 세워 풀이 줄이 남는 높이를 전부 흡수하게 한다 */
+.ws-page--grid .ws-cellin > .ws-problem > div:last-child{
+  display:flex;flex-direction:column;min-height:0}
+.ws-page--grid .ws-row{flex:1;min-height:0}
+.ws-page--grid .ws-row-main{display:flex;flex-direction:column;min-height:0}
+
+/* 풀이 여백은 초안이 정한 몫(--split)을 기본으로 갖되, 글이 길면 먼저 양보한다 */
+.ws-page--grid .ws-answer{flex:1 1 calc((1 - var(--split,.5)) * 100%);height:auto;min-height:10mm}
+
+/* 글이 많아 여백까지 내준 칸 */
+.ws-noroom .ws-answer{min-height:0}
+
+/* 맞춰 줄인 칸 · 그래도 잘린 칸 — 화면에서만 알린다 (인쇄에는 안 나온다) */
+.ws-tight,.ws-clip{position:relative}
+@media screen{
+  .ws-tight::after{content:"칸에 맞춰 줄임";position:absolute;right:0;bottom:0;
+    font-size:6.4pt;letter-spacing:.06em;color:#c08a2e;opacity:.75}
+  .ws-clip{outline:1.2px dashed #d4553c;outline-offset:-1px}
+  .ws-clip::after{content:"칸이 작아 일부가 가려짐";color:#d4553c;opacity:1;font-weight:700}
+}
