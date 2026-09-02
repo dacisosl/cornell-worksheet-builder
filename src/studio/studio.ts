@@ -34,7 +34,8 @@ import { THEME_ORDER, THEMES, isThemeName, type ThemeName } from './themes';
 
 import './studio.css';
 
-const STORE_KEY = 'cornell-studio-v1';
+// v2: 캡처 단위가 이미지별에서 칸별로 바뀌어 v1 저장본의 도판 출처가 맞지 않는다.
+const STORE_KEY = 'cornell-studio-v2';
 
 export interface StudioContext {
   state: AppState;
@@ -122,7 +123,7 @@ function createSession(ctx: StudioContext): Session {
   /* ── 뼈대 ─────────────────────────────────────────────── */
 
   const frame = el('iframe', { title: '완성본 미리보기' });
-  /* 예시임을 못 알아볼 수 없게 — iframe 바깥에 겹쳐서 흐림에 같이 먹지 않는다 */
+  /* 예시임을 못 알아볼 수 없게 — 문서는 또렷하게 두고 은은한 워터마크만 겹친다 */
   const mark = el('div', { class: 'st-mark', 'aria-hidden': 'true' });
   for (let i = 0; i < 15; i += 1) mark.appendChild(el('span', { text: '예시 SAMPLE' }));
   /* 배율은 여기서 건다 — iframe 자체는 늘 A4 실치수(210×297mm)다 */
@@ -554,7 +555,7 @@ function createSession(ctx: StudioContext): Session {
     if (doc) render(doc, false);
   }
 
-  /** 미리보기에 문서 한 편을 띄운다. 예시는 흐림·워터마크가 붙고 고칠 수 없다. */
+  /** 미리보기에 문서 한 편을 띄운다. 예시는 워터마크가 붙고 고칠 수 없다. */
   function render(target: PolishedDoc, sample: boolean): void {
     showingSample = sample;
     empty.remove();
@@ -599,8 +600,6 @@ function createSession(ctx: StudioContext): Session {
     stage.style.setProperty('--k', String(k));
     stage.style.width = `${Math.round(pw * k)}px`;
     stage.style.height = `${Math.round(ph * k)}px`;
-    // filter는 scale 이전 좌표계라 화면에서는 k배로 얇아진다 — 되돌려 준다.
-    stage.style.setProperty('--sample-blur', `${(1.8 / k).toFixed(2)}px`);
   }
 
   new ResizeObserver(() => applyZoom()).observe(view);
