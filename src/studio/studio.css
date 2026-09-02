@@ -106,3 +106,7 @@
 .st-fail--model{border-top:0;background:#fdf1ec;border:1px solid #f0c8b8;border-radius:8px;
   padding:9px 11px;margin-top:8px}
 .st-fail--model div{color:#8a4a33;font-weight:600;word-break:keep-all}
+
+/* 설정 체크 — 「그림을 벡터로 다시 그리기」 */
+.st-check{display:flex;align-items:flex-start;gap:8px;margin:10px 0 2px;font-size:12px;line-height:1.5;color:#3a3a38;cursor:pointer}
+.st-check input{margin:2px 0 0;flex:none;accent-color:#2b6cff}
