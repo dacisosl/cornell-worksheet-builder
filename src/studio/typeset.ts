@@ -198,14 +198,36 @@ interface Place {
 }
 
 /**
+ * 도판의 알맹이 — 다시 그린 SVG 가 있고 교사가 원본으로 되돌리지 않았으면 SVG,
+ * 아니면 잘라낸 캡처. 둘 다 **잘라낸 그림과 같은 가로/세로 비의 상자**에 들어가므로
+ * 어느 쪽을 쓰든 차지하는 자리는 같다. 미리보기에서는 클릭으로 둘을 바꿔 볼 수 있다.
+ */
+function figureBody(f: FigureRef, path: string, opts: RenderOpts): string {
+  const useSvg = !!f.svg && f.useSvg !== false;
+  const aspect = f.aspect && f.aspect > 0 ? f.aspect : undefined;
+  const ratio = aspect ? ` style="aspect-ratio:${aspect.toFixed(4)}"` : '';
+  const inner = useSvg
+    ? `<div class="ws-svg"${ratio}>${f.svg}</div>`
+    : `<img src="${f.src}" alt="">`;
+  // 다시 그린 그림이 있을 때만 바꿔 보기 단추를 단다 — 화면에서만, 인쇄에는 안 나온다.
+  const toggle =
+    opts.editable && f.svg
+      ? `<button type="button" class="ws-figtoggle" data-fig="${path}" title="${useSvg ? '원본 캡처로 보기' : '다시 그린 그림으로 보기'}">${useSvg ? '원본' : '벡터'}</button>`
+      : '';
+  const badge = useSvg ? '<span class="ws-figbadge" aria-hidden="true">SVG</span>' : '';
+  return `${inner}${toggle}${badge}`;
+}
+
+/**
  * 도판은 초안에서 보이던 크기로 앉힌다 — 칸 가득 늘리지 않는다.
- * 자리를 알면 문제 영역 대비 폭과 위치를 그대로 쓰고, 문제 오른쪽(왼쓰)에 세로로 길게
+ * 자리를 알면 문제 영역 대비 폭과 위치를 그대로 쓰고, 문제 오른쪽(왼쪽)에 세로로 길게
  * 서 있던 그림은 글 옆에 띄운다. 자리를 모르면 기본 크기로 옆에 세운다.
  */
-function figureHtml(f: FigureRef, place: Place | null, wide: boolean): string {
-  if (!f.src) return '';
+function figureHtml(f: FigureRef, place: Place | null, wide: boolean, path: string, opts: RenderOpts): string {
+  if (!f.src && !f.svg) return '';
   const cap = f.caption ? `<figcaption>${escapeHtml(f.caption)}</figcaption>` : '';
   const box = f.box ?? f.bbox;
+  const body = figureBody(f, path, opts);
 
   if (place?.bbox) {
     const rel = within(box, place.bbox);
@@ -221,17 +243,17 @@ function figureHtml(f: FigureRef, place: Place | null, wide: boolean): string {
       cls = 'ws-figure ws-figure--float-l';
       style = `width:${pct(w)}`;
     }
-    return `<figure class="${cls}" style="${style}"><img src="${f.src}" alt="">${cap}</figure>`;
+    return `<figure class="${cls}" style="${style}">${body}${cap}</figure>`;
   }
 
   if (place) {
     // 절대배치 박스 안이지만 아이템 자리는 모른다 — 박스 폭 기준으로 크기만 지킨다.
     const w = Math.min(1, Math.max(0.08, box[2]));
-    return `<figure class="ws-figure ws-figure--block" style="width:${pct(w)};margin-left:${pct(Math.min(1 - w, box[0]))}"><img src="${f.src}" alt="">${cap}</figure>`;
+    return `<figure class="ws-figure ws-figure--block" style="width:${pct(w)};margin-left:${pct(Math.min(1 - w, box[0]))}">${body}${cap}</figure>`;
   }
 
   const cls = wide ? 'ws-figure ws-figure--wide' : 'ws-figure ws-figure--side';
-  return `<figure class="${cls}"><img src="${f.src}" alt="">${cap}</figure>`;
+  return `<figure class="${cls}">${body}${cap}</figure>`;
 }
 
 function problemHtml(
@@ -260,16 +282,16 @@ function problemHtml(
         .join('')}</div>`
     : '';
 
-  const figs = (item.figures ?? []).filter((f) => f.src);
+  const figs = (item.figures ?? []).filter((f) => f.src || f.svg);
   const note = noteHtml(item.note, path, opts);
+  const fig = (f: FigureRef, i: number, w: boolean) => figureHtml(f, place, w, `${path}.f${i}`, opts);
 
   if (place) {
     // 절대배치: 풀이 줄은 풀이칸 박스가 따로 맡는다. 그림은 글 안에 자리대로.
-    const floats = figs.filter((f) => figureHtml(f, place, false).includes('--float'));
-    const blocks = figs.filter((f) => !floats.includes(f));
-    const inner = `${floats.map((f) => figureHtml(f, place, false)).join('')}${stem}${choices}${subqs}${note}${blocks
-      .map((f) => figureHtml(f, place, false))
-      .join('')}`;
+    const rendered = figs.map((f, i) => fig(f, i, false));
+    const floats = rendered.filter((h) => h.includes('--float'));
+    const blocks = rendered.filter((h) => !h.includes('--float'));
+    const inner = `${floats.join('')}${stem}${choices}${subqs}${note}${blocks.join('')}`;
     return `<section class="ws-item ws-problem${noMark ? ' ws-problem--nomark' : ''}">
     ${noMark ? '' : markHtml(n, item.tagLabel)}
     <div>${inner}</div>
@@ -280,7 +302,7 @@ function problemHtml(
   // 도판이 있으면 글과 나란히 세운다. 없으면 한 단으로 쭉 흐른다.
   const inner = figs.length
     ? `<div class="ws-row"><div class="ws-row-main">${stem}${choices}${subqs}${note}${answer}</div>${figs
-        .map((f) => figureHtml(f, null, false))
+        .map((f, i) => fig(f, i, false))
         .join('')}</div>`
     : `${stem}${choices}${subqs}${note}${answer}`;
 
@@ -292,20 +314,21 @@ function problemHtml(
 
 /** 개념 정리 박스 — 용어(24mm) | 정의. 면 색(tint)은 용어 칸 한 곳에만 쓴다. */
 function conceptHtml(item: ConceptItem, path: string, opts: RenderOpts, place: Place | null): string {
-  const figs = (item.figures ?? []).filter((f) => f.src);
+  const figs = (item.figures ?? []).filter((f) => f.src || f.svg);
   const body = editable(runsToHtml(item.body), `${path}.body`, 'ws-concept-body', 'div', opts);
   const note = noteHtml(item.note, path, opts);
+  const figsHtml = figs.map((f, i) => figureHtml(f, place, true, `${path}.f${i}`, opts)).join('');
 
   if (place) {
     // 절대배치: 용어는 칸 머리가 맡는다. 여기는 정의와 그림만.
     return `<section class="ws-item ws-concept ws-concept--abs">
-    <div class="ws-concept-main">${body}${note}${figs.map((f) => figureHtml(f, place, true)).join('')}</div>
+    <div class="ws-concept-main">${body}${note}${figsHtml}</div>
   </section>`;
   }
 
   return `<section class="ws-item ws-concept">
     <div class="ws-concept-term">${escapeHtml(item.title ?? '개념')}</div>
-    <div class="ws-concept-main">${body}${note}${figs.map((f) => figureHtml(f, null, true)).join('')}</div>
+    <div class="ws-concept-main">${body}${note}${figsHtml}</div>
   </section>`;
 }
 
@@ -530,6 +553,16 @@ const FIT_SCRIPT = `<script>
 })();
 </script>`;
 
+/** 미리보기에서 도판의 원본/벡터를 바꿔 보는 단추 — 부모(스튜디오)에 알리면 거기서 문서를 고친다 */
+const FIG_TOGGLE_SCRIPT = `<script>
+document.addEventListener('click', function(e){
+  var b = e.target && e.target.closest ? e.target.closest('.ws-figtoggle') : null;
+  if(!b) return;
+  e.preventDefault();
+  if(window.parent && window.parent !== window) window.parent.postMessage({ type: 'ws-fig-toggle', path: b.getAttribute('data-fig') }, '*');
+});
+</script>`;
+
 /** 완성본 한 편을 통째로 만든다 — 이 문자열만 있으면 어디서든 열린다. */
 export function renderDocument(doc: PolishedDoc, opts: RenderOpts = {}): string {
   const head: DocHead = {
@@ -565,6 +598,7 @@ ${absolute ? ABS_TAIL_CSS : ''}
 <body>
 ${body}
 ${absolute ? FIT_SCRIPT : ''}
+${opts.editable ? FIG_TOGGLE_SCRIPT : ''}
 </body>
 </html>`;
 }

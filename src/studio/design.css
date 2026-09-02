@@ -225,3 +225,18 @@ body{background:#ececea;font-family:var(--sans);color:var(--ink);
   .ws-clip{outline:1.2px dashed #d4553c;outline-offset:-1px}
   .ws-clip::after{content:"칸이 작아 일부가 가려짐";color:#d4553c;opacity:1;font-weight:700}
 }
+
+/* ── 다시 그린 도판(SVG) — 잘라낸 그림과 같은 비율의 상자에 앉아 자리가 같다 ── */
+.ws-svg{width:100%;display:block}
+.ws-svg svg{width:100%;height:100%;display:block}
+.ws-figure{position:relative}
+/* 화면에서만: 원본 ↔ 벡터 바꿔 보기, 벡터 표시 */
+.ws-figtoggle,.ws-figbadge{display:none}
+@media screen{
+  .ws-figtoggle{display:block;position:absolute;right:1.6mm;top:1.6mm;font:inherit;font-size:7pt;
+    font-weight:700;padding:.6mm 1.8mm;border:1px solid #c9c9c9;border-radius:99px;background:rgba(255,255,255,.92);
+    color:#4a4a46;cursor:pointer;opacity:0;transition:opacity .12s}
+  .ws-figure:hover .ws-figtoggle{opacity:1}
+  .ws-figbadge{display:block;position:absolute;left:1.6mm;top:1.6mm;font-size:6.2pt;font-weight:800;
+    letter-spacing:.08em;color:#8a8a84;opacity:.75}
+}
