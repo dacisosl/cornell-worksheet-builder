@@ -36,6 +36,7 @@ import {
 } from './extract';
 import { DESIGN_ORDER, DESIGNS, isDesignName, type DesignName } from './designs';
 import { fillFigures } from './figures';
+import { redrawAll } from './redraw';
 import type { FigureRef, PolishedDoc, WorksheetItem } from './schema';
 import { SAMPLE_DOC } from './sampleDoc';
 import { bakeDraft, thumbnailUrl, type Bake, type PrintLayout } from './snapshot';
@@ -126,8 +127,19 @@ export default function openStudio(ctx: StudioContext): void {
   session.show();
 }
 
+/** "그림을 벡터로 다시 그리기" 설정 — 기본은 켬 */
+const REDRAW_KEY = 'cornell-studio-redraw';
+function loadRedraw(): boolean {
+  try {
+    return localStorage.getItem(REDRAW_KEY) !== '0';
+  } catch {
+    return true;
+  }
+}
+
 function createSession(ctx: StudioContext): Session {
   const settings: AiSettings = loadSettings();
+  let redraw = loadRedraw();
   let design: DesignName = 'mono';
   let doc: PolishedDoc | null = null;
   let overrides: Record<string, string> = {};
@@ -286,6 +298,7 @@ function createSession(ctx: StudioContext): Session {
     overlay.remove();
     pill.remove();
     document.removeEventListener('keydown', onKey);
+    window.removeEventListener('message', onFrameMessage);
     session = null;
   }
 
@@ -392,6 +405,26 @@ function createSession(ctx: StudioContext): Session {
   }) as HTMLButtonElement;
   stopBtn.style.display = 'none';
 
+  const redrawInput = el('input', { type: 'checkbox' }) as HTMLInputElement;
+  redrawInput.checked = redraw;
+  redrawInput.addEventListener('change', () => {
+    redraw = redrawInput.checked;
+    try {
+      localStorage.setItem(REDRAW_KEY, redraw ? '1' : '0');
+    } catch {
+      /* 설정을 남기지 못해도 이번 세션에서는 쓴다 */
+    }
+  });
+  const redrawRow = el(
+    'label',
+    {
+      class: 'st-check',
+      title:
+        '그래프·도형·표를 모델이 벡터(SVG)로 다시 그려 인쇄에서 또렷하게 만듭니다. 크기와 자리는 원본 그대로입니다. 그림마다 요청이 1번 더 갑니다. 미리보기에서 그림 위 「원본」 버튼으로 원본과 대조하고 되돌릴 수 있습니다.',
+    },
+    [redrawInput, el('span', { text: '그림을 벡터로 다시 그리기 (그림마다 요청 1번)' })],
+  );
+
   const noteLine = el('p', { class: 'hint' });
   function note(msg: string): void {
     noteLine.textContent = msg;
@@ -401,13 +434,14 @@ function createSession(ctx: StudioContext): Session {
     el('h2', { text: '완성하기 스튜디오' }),
     el('p', {
       class: 'hint',
-      text: '초안을 먼저 PDF처럼 한 장으로 구운 뒤, 칸·문제·그림의 자리는 그대로 두고 글만 어절 단위로 다시 조판합니다. 손필기는 옮기지 않습니다. 초안은 그대로 둡니다.',
+      text: '초안을 먼저 PDF처럼 한 장으로 구운 뒤, 칸·문제·그림의 자리와 크기는 그대로 두고 글만 어절 단위로 다시 조판합니다. 그림은 같은 자리·같은 크기에 벡터로 다시 그릴 수 있습니다 — 다시 그린 그림은 원본과 꼭 대조하세요. 손필기는 옮기지 않습니다. 초안은 그대로 둡니다.',
     }),
     el('div', { class: 'st-group' }, [el('label', { text: 'AI 제공자' }), providerSel]),
     el('div', { class: 'st-group' }, [el('label', { text: 'API 키' }), keyInput, keyLink]),
     el('div', { class: 'st-group' }, [
       el('label', { text: '모델' }),
       el('div', { class: 'st-row' }, [modelSel, loadModelsBtn]),
+      redrawRow,
       runBtn,
       stopBtn,
       noteLine,
@@ -557,6 +591,20 @@ function createSession(ctx: StudioContext): Session {
       overrides = {};
       setProgress(1, 1, '도판을 다듬는 중…');
       await prepareFigures();
+
+      // 5) 그림을 벡터로 다시 그린다 — 자리·크기는 그대로, 선만 또렷하게.
+      //    모델 문제로 전사가 막혔으면 같은 사유로 막힐 테니 부르지 않는다.
+      let redrawNote = '';
+      if (redraw && !failures.some((f) => f.fatal)) {
+        const r = await redrawFigures(abort.signal);
+        if (abort.signal.aborted) {
+          // 그림은 원본 캡처로도 완성본이 된다 — 여기서 멈추면 그때까지 된 것을 살린다.
+          redrawNote = '그림 다시 그리기를 중지했습니다. 나머지 그림은 원본 캡처로 들어갔습니다.';
+        } else if (r.fatal) {
+          redrawNote = `${r.fatal} 그림은 원본 캡처로 들어갔습니다.`;
+        }
+      }
+
       setProgress(
         1,
         1,
@@ -568,9 +616,11 @@ function createSession(ctx: StudioContext): Session {
       note(
         modelFail
           ? `${modelFail.error ?? '이 모델로는 전사할 수 없습니다.'} 위 모델 목록에서 그림을 읽을 수 있는 다른 모델을 고른 뒤 다시 만들어 주세요.`
-          : bake.rasterized
-            ? ''
-            : '쪽 그림을 만들지 못해 이미지 조각만으로 전사했습니다. 배치는 그대로 지켰습니다.',
+          : redrawNote
+            ? redrawNote
+            : bake.rasterized
+              ? ''
+              : '쪽 그림을 만들지 못해 이미지 조각만으로 전사했습니다. 배치는 그대로 지켰습니다.',
       );
     } catch (e) {
       note(e instanceof Error ? e.message : String(e));
@@ -600,6 +650,7 @@ function createSession(ctx: StudioContext): Session {
     }
     failures = failures.filter((f) => f.unit.id !== unit.id);
     await prepareFigures();
+    if (redraw) await redrawFigures();
     setProgress(1, 1, '다시 전사했습니다.');
     persist();
     preview();
@@ -670,6 +721,43 @@ function createSession(ctx: StudioContext): Session {
     }
   }
 
+  /**
+   * 아직 다시 그리지 않은 그림을 벡터로 그린다. 크기는 typeset 이 원본 상자에 맞추므로
+   * 여기서는 그림만 바꾼다. 중지 신호가 오면 남은 그림은 원본으로 둔다.
+   */
+  async function redrawFigures(signal?: AbortSignal): Promise<{ drawn: number; fatal?: string }> {
+    if (!doc) return { drawn: 0 };
+    const refs = allFigures(doc);
+    const todo = refs.filter((f) => f.src && f.svg === undefined).length;
+    if (!todo) return { drawn: 0 };
+    setProgress(0, todo, `그림 0/${todo} 다시 그리는 중…`);
+    return redrawAll(
+      settings,
+      refs,
+      (done, total) => setProgress(done, total, `그림 ${done}/${total} 다시 그리는 중…`),
+      signal,
+    );
+  }
+
+  /** 미리보기의 「원본/벡터」 버튼 — 그 그림만 원본 캡처와 다시 그린 것 사이를 오간다. */
+  function onFrameMessage(e: MessageEvent): void {
+    if (e.source !== frame.contentWindow || !doc || showingSample) return;
+    const data = e.data as { type?: unknown; path?: unknown } | null;
+    if (!data || data.type !== 'ws-fig-toggle' || typeof data.path !== 'string') return;
+    const m = /^s(\d+)\.i(\d+)\.f(\d+)$/.exec(data.path);
+    if (!m) return;
+    const item = doc.sections[Number(m[1])]?.items[Number(m[2])];
+    if (!item || (item.kind !== 'problem' && item.kind !== 'concept')) return;
+    // typeset 은 src·svg 가 있는 그림만 번호를 매긴다 — 같은 규칙으로 찾는다.
+    const fig = (item.figures ?? []).filter((f) => f.src || f.svg)[Number(m[3])];
+    if (!fig || !fig.svg) return;
+    harvestEdits();
+    fig.useSvg = fig.useSvg === false;
+    persist();
+    preview();
+  }
+  window.addEventListener('message', onFrameMessage);
+
   /* ── 미리보기 · 수정 수확 ─────────────────────────────── */
 
   function preview(): void {
@@ -703,7 +791,7 @@ function createSession(ctx: StudioContext): Session {
     window.setTimeout(() => {
       const clipped = d.querySelectorAll('.ws-clip').length;
       if (clipped > 0) {
-        note(`칸 ${clipped}개는 글이 많아 일부가 가려졌습니다. 초안에서 그 칸을 키운 뒤 다시 만들어 주세요.`);
+        note(`칸 ${clipped}개는 글씨와 간격을 줄여도 다 들어가지 않아 일부가 가려졌습니다. 초안에서 그 칸을 키운 뒤 다시 만들어 주세요.`);
       }
     }, 400);
   }

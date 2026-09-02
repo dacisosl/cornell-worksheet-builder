@@ -34,6 +34,12 @@ export interface FigureRef {
    * bbox 는 그 이미지 대비 비율, at 은 그 이미지가 캡처(문제칸)에서 차지한 자리.
    */
   source?: { imgId: number; bbox: Rect; at: Rect };
+  /** 잘라낸 그림의 가로/세로 비 — 다시 그린 SVG 를 같은 자리·같은 크기에 앉힐 때 쓴다 */
+  aspect?: number;
+  /** 벡터로 다시 그린 그림 (정제된 SVG). 사진처럼 옮길 수 없는 그림은 없다. */
+  svg?: string;
+  /** 교사가 미리보기에서 원본으로 되돌렸으면 false */
+  useSvg?: boolean;
 }
 
 export interface ProblemItem {

@@ -131,11 +131,14 @@ function trimMargins(c: HTMLCanvasElement): { c: HTMLCanvasElement; left: number
  * 정리한 도판을 dataURL 로, 실제로 덮는 영역(원본 대비 비율)과 함께.
  * 실패하면 원본을 그대로, 영역은 bbox 그대로 돌려준다.
  */
-export async function prepareFigure(src: string, bbox: Rect): Promise<{ src: string; box: Rect }> {
+export async function prepareFigure(
+  src: string,
+  bbox: Rect,
+): Promise<{ src: string; box: Rect; aspect: number }> {
   try {
     const img = await loadImage(src);
     const cropped = cropBBox(img, bbox);
-    if (!cropped) return { src, box: bbox };
+    if (!cropped) return { src, box: bbox, aspect: img.naturalWidth / Math.max(1, img.naturalHeight) };
     normalizeWhite(cropped.c);
     const trimmed = trimMargins(cropped.c);
     const nw = Math.max(1, img.naturalWidth);
@@ -148,9 +151,9 @@ export async function prepareFigure(src: string, bbox: Rect): Promise<{ src: str
     ];
     const url = trimmed.c.toDataURL('image/png');
     const reloaded = await loadImage(url);
-    return { src: unsharp(reloaded) ?? url, box };
+    return { src: unsharp(reloaded) ?? url, box, aspect: trimmed.c.width / Math.max(1, trimmed.c.height) };
   } catch {
-    return { src, box: bbox };
+    return { src, box: bbox, aspect: bbox[2] / Math.max(1e-6, bbox[3]) };
   }
 }
 
@@ -172,6 +175,7 @@ export async function fillFigures(
       const r = await prepareFigure(origin, ref.source.bbox);
       ref.src = r.src;
       ref.box = compose(ref.source.at, r.box);
+      ref.aspect = r.aspect;
       continue;
     }
     const cap = captureSrc(ref.from);
@@ -179,5 +183,6 @@ export async function fillFigures(
     const r = await prepareFigure(cap, ref.bbox);
     ref.src = r.src;
     ref.box = r.box;
+    ref.aspect = r.aspect;
   }
 }
